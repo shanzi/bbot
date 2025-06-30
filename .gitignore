@@ -12,3 +12,4 @@ wheels/
 # Secrets file
 fastagent.secrets.yaml
 .env
+fastagent.jsonl
