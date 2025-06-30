@@ -93,6 +93,15 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     chat_id = update.effective_chat.id
     user_message = update.message.text
 
+    if user_message == "OpenAI":
+        current_agents[chat_id] = "openai"
+        await update.message.reply_text("Switched to OpenAI agent.")
+        return
+    elif user_message == "Claude":
+        current_agents[chat_id] = "claude"
+        await update.message.reply_text("Switched to Claude agent.")
+        return
+
     agent_name = current_agents.get(chat_id, "openai")
     agent_to_use = None
 
