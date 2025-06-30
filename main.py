@@ -39,38 +39,11 @@ claude_agent_instance = None
 # Dictionary to store the current agent for each chat
 current_agents = {}
 
-import re
-
 # Get the local timezone dynamically
 try:
     local_timezone = datetime.datetime.now().astimezone().tzinfo
 except Exception:
     local_timezone = "UTC" # Fallback if timezone detection fails
-
-def filter_tool_output(text: str) -> str:
-    """
-    Filters out tool calling history and other intermediate steps from the agent's response.
-    """
-    # Patterns to match various intermediate steps and tool outputs
-    patterns = [
-        r"tool_code\(.*?\)",
-        r"tool_code_result\(.*?\)",
-        r"^Thinking:.*",
-        r"^Tool Call:.*",
-        r"^Observation:.*",
-        r"^Action:.*",
-        r"^\s*\*\s*tool_code\(.*?\)", # For markdown lists
-        r"^\s*\*\s*tool_code_result\(.*?\)", # For markdown lists
-    ]
-
-    filtered_text = text
-    for pattern in patterns:
-        filtered_text = re.sub(pattern, "", filtered_text, flags=re.MULTILINE)
-
-    # Remove any empty lines that might result from filtering
-    filtered_text = os.linesep.join([s for s in filtered_text.splitlines() if s.strip()])
-
-    return filtered_text
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Send a message when the command /start is issued."""
@@ -144,9 +117,17 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
     if agent_to_use:
         try:
-            response_text = await agent_to_use.send(user_message)
-            filtered_response_text = filter_tool_output(response_text)
-            telegram_response = markdownify(filtered_response_text)
+            # Get the actual BaseAgent instance from the AgentApp
+            # Since we only have one agent per FastAgent instance, we can get the first one
+            actual_agent = next(iter(agent_to_use._agents.values()))
+
+            # Generate the response as a PromptMessageMultipart object
+            response_multipart = await actual_agent.generate([actual_agent._normalize_message_input(user_message)], None)
+
+            # Get only the last text content (final assistant response)
+            response_text = response_multipart.last_text()
+
+            telegram_response = markdownify(response_text)
             await update.message.reply_text(telegram_response, parse_mode=ParseMode.MARKDOWN_V2)
 
         except Exception as e:
