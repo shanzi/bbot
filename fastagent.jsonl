@@ -1,0 +1,4 @@
+{"level":"ERROR","timestamp":"2025-06-30T21:51:49.807408","namespace":"mcp_agent.mcp.mcp_agent_client_session","message":"send_request failed: Connection closed"}
+{"level":"ERROR","timestamp":"2025-06-30T21:51:49.808714","namespace":"mcp_agent.mcp.mcp_connection_manager","message":"weather: Lifecycle task encountered an error: unhandled errors in a TaskGroup (1 sub-exception)","data":{"exc_info":true,"data":{"progress_action":"Error","server_name":"weather"}}}
+{"level":"ERROR","timestamp":"2025-06-30T21:52:43.532883","namespace":"mcp_agent.mcp.mcp_agent_client_session","message":"send_request failed: Connection closed"}
+{"level":"ERROR","timestamp":"2025-06-30T21:52:43.533308","namespace":"mcp_agent.mcp.mcp_connection_manager","message":"weather: Lifecycle task encountered an error: unhandled errors in a TaskGroup (1 sub-exception)","data":{"exc_info":true,"data":{"progress_action":"Error","server_name":"weather"}}}

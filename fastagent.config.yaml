@@ -1,0 +1,14 @@
+mcp:
+  servers:
+    weather:
+      command: "uv"
+      args: ["run", "python", "-m", "mcp_weather_server"]
+    fetch:
+      command: "uv"
+      args: ["run", "python", "-m", "mcp_server_fetch"]
+    datetime:
+      command: "uv"
+      args: ["run", "python", "-m", "mcp_datetime"]
+    calculator:
+      command: "uv"
+      args: ["run", "python", "-m", "mcp_server_calculator"]
