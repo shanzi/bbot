@@ -51,14 +51,21 @@ def filter_tool_output(text: str) -> str:
     """
     Filters out tool calling history and other intermediate steps from the agent's response.
     """
-    # Pattern to match tool_code(...) blocks
-    tool_code_pattern = r"tool_code\(.*?\)"
-    # Pattern to match tool_code_result(...) blocks
-    tool_result_pattern = r"tool_code_result\(.*?\)"
+    # Patterns to match various intermediate steps and tool outputs
+    patterns = [
+        r"tool_code\(.*?\)",
+        r"tool_code_result\(.*?\)",
+        r"^Thinking:.*",
+        r"^Tool Call:.*",
+        r"^Observation:.*",
+        r"^Action:.*",
+        r"^\s*\*\s*tool_code\(.*?\)", # For markdown lists
+        r"^\s*\*\s*tool_code_result\(.*?\)", # For markdown lists
+    ]
 
-    # Remove tool_code and tool_code_result blocks
-    filtered_text = re.sub(tool_code_pattern, "", text)
-    filtered_text = re.sub(tool_result_pattern, "", filtered_text)
+    filtered_text = text
+    for pattern in patterns:
+        filtered_text = re.sub(pattern, "", filtered_text, flags=re.MULTILINE)
 
     # Remove any empty lines that might result from filtering
     filtered_text = os.linesep.join([s for s in filtered_text.splitlines() if s.strip()])
@@ -107,7 +114,7 @@ async def switch_agent(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 async def current_agent(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Shows the currently active agent for the chat."""
     chat_id = update.effective_chat.id
-    agent_name = current_agents.get(chat_id, "openai")
+    agent_name = current_agents.get(chat_id, "claude")
     await update.message.reply_text(f"Your current agent is: {agent_name.capitalize()}")
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
