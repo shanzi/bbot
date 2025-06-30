@@ -6,6 +6,8 @@ import zoneinfo
 
 from telegram import Update, ForceReply, ReplyKeyboardMarkup, BotCommand
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
+from telegram.constants import ParseMode
+from telegramify_markdown import markdownify
 from dotenv import load_dotenv
 
 from mcp_agent.core.fastagent import FastAgent
@@ -116,7 +118,8 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     if agent_to_use:
         try:
             response_text = await agent_to_use.send(user_message)
-            await update.message.reply_text(response_text)
+            telegram_response = markdownify(response_text)
+            await update.message.reply_text(telegram_response, parse_mode=ParseMode.MARKDOWN_V2)
 
         except Exception as e:
             logger.error(f"Error communicating with {agent_name} agent: {e}")
