@@ -9,8 +9,7 @@ wheels/
 # Virtual environments
 .venv
 
-# fast-agent docs
-fast-agent-docs/
+
 
 # Secrets file
 fastagent.secrets.yaml
