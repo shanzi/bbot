@@ -12,3 +12,5 @@ mcp:
     calculator:
       command: "uv"
       args: ["run", "python", "-m", "mcp_server_calculator"]
+logger:
+  show_tools: true

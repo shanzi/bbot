@@ -39,11 +39,31 @@ claude_agent_instance = None
 # Dictionary to store the current agent for each chat
 current_agents = {}
 
+import re
+
 # Get the local timezone dynamically
 try:
     local_timezone = datetime.datetime.now().astimezone().tzinfo
 except Exception:
     local_timezone = "UTC" # Fallback if timezone detection fails
+
+def filter_tool_output(text: str) -> str:
+    """
+    Filters out tool calling history and other intermediate steps from the agent's response.
+    """
+    # Pattern to match tool_code(...) blocks
+    tool_code_pattern = r"tool_code\(.*?\)"
+    # Pattern to match tool_code_result(...) blocks
+    tool_result_pattern = r"tool_code_result\(.*?\)"
+
+    # Remove tool_code and tool_code_result blocks
+    filtered_text = re.sub(tool_code_pattern, "", text)
+    filtered_text = re.sub(tool_result_pattern, "", filtered_text)
+
+    # Remove any empty lines that might result from filtering
+    filtered_text = os.linesep.join([s for s in filtered_text.splitlines() if s.strip()])
+
+    return filtered_text
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Send a message when the command /start is issued."""
@@ -53,7 +73,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         "Use /switch_agent to change the active agent."
     )
     # Set default agent for the chat
-    current_agents[update.effective_chat.id] = "openai"
+    current_agents[update.effective_chat.id] = "claude"
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Send a message when the command /help is issued."""
@@ -72,7 +92,7 @@ To talk to the agent, just send a message directly."""
 async def switch_agent(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Allows the user to switch between OpenAI and Claude agents."""
     chat_id = update.effective_chat.id
-    current_agent_name = current_agents.get(chat_id, "openai") # Default to openai
+    current_agent_name = current_agents.get(chat_id, "claude") # Default to claude
 
     keyboard = [
         ["OpenAI", "Claude"]
@@ -104,7 +124,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         await update.message.reply_text("Switched to Claude agent.")
         return
 
-    agent_name = current_agents.get(chat_id, "openai")
+    agent_name = current_agents.get(chat_id, "claude")
     agent_to_use = None
 
     if agent_name == "openai":
@@ -118,7 +138,8 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     if agent_to_use:
         try:
             response_text = await agent_to_use.send(user_message)
-            telegram_response = markdownify(response_text)
+            filtered_response_text = filter_tool_output(response_text)
+            telegram_response = markdownify(filtered_response_text)
             await update.message.reply_text(telegram_response, parse_mode=ParseMode.MARKDOWN_V2)
 
         except Exception as e:
