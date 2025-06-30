@@ -10,4 +10,6 @@ dependencies = [
     "mcp-server-calculator",
     "mcp-server-fetch",
     "mcp-weather-server",
+    "python-telegram-bot",
+    "python-dotenv",
 ]

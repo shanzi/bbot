@@ -9,18 +9,23 @@ try:
 except Exception:
     local_timezone = "UTC" # Fallback if timezone detection fails
 
-# Create the application
-fast = FastAgent("fast-agent example", config_path="fastagent.config.yaml")
+def get_fast_agent_app():
+    # Create the application
+    fast = FastAgent("openai-agent", config_path="fastagent.config.yaml")
 
-# Define the agent
-@fast.agent(
-    instruction=f"You are a helpful assistant. You can get weather information, fetch web content, get the current date and time (currently in {local_timezone}), and perform arithmetic calculations.",
-    model="openai.gpt-4o-mini",
-    servers=["weather", "fetch", "datetime", "calculator"],
-)
+    # Define the agent
+    @fast.agent(
+        instruction=f"You are a helpful assistant. You can get weather information, fetch web content, get the current date and time (currently in {local_timezone}), and perform arithmetic calculations.",
+        model="openai.gpt-4o-mini",
+        servers=["weather", "fetch", "datetime", "calculator"],
+    )
+    async def main_agent():
+        pass # This agent will be controlled externally
+    return fast
+
 async def main():
-    # use the --model command line switch or agent arguments to change model
-    async with fast.run() as agent:
+    fast_app = get_fast_agent_app()
+    async with fast_app.run() as agent:
         await agent.interactive()
 
 if __name__ == "__main__":
