@@ -11,3 +11,6 @@ wheels/
 
 # fast-agent docs
 fast-agent-docs/
+
+# Secrets file
+fastagent.secrets.yaml
