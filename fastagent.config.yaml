@@ -3,14 +3,20 @@ mcp:
     weather:
       command: "uv"
       args: ["run", "python", "-m", "mcp_weather_server"]
-    fetch:
-      command: "uv"
-      args: ["run", "python", "-m", "mcp_server_fetch"]
     datetime:
       command: "uv"
-      args: ["run", "python", "-m", "mcp_datetime"]
+      args: ["run", "python", "-m", "mcp_server_time", "--local-timezone", "Asia/Tokyo"]
     calculator:
       command: "uv"
       args: ["run", "python", "-m", "mcp_server_calculator"]
+    context7:
+      command: "npx"
+      args: ["-y", "@upstash/context7-mcp"]
+    filesystem:
+      command: "npx"
+      args: ["-y", "@modelcontextprotocol/server-filesystem", "/home/chase/Codes/chatbot/bbot/data", "/home/chase/Codes/chatbot/bbot/data/document"]
+    download:
+      command: "uv"
+      args: ["run", "python", "download_server.py"]
 logger:
   show_tools: true

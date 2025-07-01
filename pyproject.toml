@@ -6,11 +6,12 @@ readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
     "fast-agent-mcp",
-    "mcp-datetime",
+    "mcp-server-time",
     "mcp-server-calculator",
     "mcp-server-fetch",
     "mcp-weather-server",
     "python-telegram-bot",
     "python-dotenv",
     "telegramify-markdown",
+    "mcp[cli]",
 ]

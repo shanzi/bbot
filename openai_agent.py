@@ -15,9 +15,9 @@ def get_fast_agent_app():
 
     # Define the agent
     @fast.agent(
-        instruction=f"You are a helpful assistant. You can get weather information, fetch web content, get the current date and time (currently in {local_timezone}), and perform arithmetic calculations.",
+        instruction=f"You are a helpful assistant. You can get weather information, download binary files from URLs and save them to the 'data/document' folder, get the current date and time (including timezone conversions), perform arithmetic calculations, get code documentation, and manage files on the filesystem. Always use the 'download' tool to handle binary data from URLs.",
         model="openai.gpt-4o-mini",
-        servers=["weather", "fetch", "datetime", "calculator"],
+        servers=["weather", "download", "datetime", "calculator", "context7", "filesystem"],
     )
     async def main_agent():
         pass # This agent will be controlled externally
