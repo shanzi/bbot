@@ -18,6 +18,6 @@ mcp:
     utils:
       command: "uv"
       args: ["run", "python", "-m", "mcp_server_utils"]
-    pandoc:
-      command: "uvx"
-      args: ["mcp-pandoc"]
+    
+    
+    
