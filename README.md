@@ -4,8 +4,8 @@ This project implements a Telegram bot that integrates with `fast-agent` to prov
 
 ## Features
 
-*   **Multi-Agent Support:** Switch between OpenAI (GPT-4o Mini) and Claude (Claude 3.5 Sonnet) agents.
-*   **Modular Design:** Agent definitions are separated into `openai_agent.py` and `claude_agent.py`.
+*   **Multi-Agent Support:** Switch between OpenAI, Claude, and Gemini agents.
+*   **Modular Design:** Agent definitions are handled dynamically based on selected model.
 *   **MCP Server Integration:** Utilizes pre-built Model Context Protocol (MCP) servers for:
     *   Weather information (`mcp-weather-server`)
     *   Web content fetching (`mcp-server-fetch`)
@@ -68,14 +68,4 @@ To start the Telegram bot:
 uv run python main.py
 ```
 
-## Running Individual Agents (for testing/development)
 
-You can also run the OpenAI or Claude agents directly in an interactive shell:
-
-```bash
-uv run python openai_agent.py
-# or
-uv run python claude_agent.py
-```
-
-Once running, you can type messages and interact with the agent directly in your terminal.
