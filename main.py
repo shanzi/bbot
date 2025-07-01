@@ -176,6 +176,22 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             await file.download_to_drive(target)
 
             user_message += f"(attachment downloaded to {target})"
+        elif update.message.photo:
+            await context.bot.edit_message_text(
+                chat_id=chat_id,
+                message_id=placeholder_message.message_id,
+                text="Downloading image..."
+            )
+            # Get the largest photo
+            photo = update.message.photo[-1]
+            file = await context.bot.get_file(photo.file_id)
+            target_dir = utils.get_save_directory("pictures")
+            os.makedirs(target_dir, exist_ok=True)
+            file_extension = photo.file_path.split('.')[-1] if photo.file_path else 'jpg'
+            target = os.path.join(target_dir, f"{int(time.time()*1000)}.{file_extension}")
+            await file.download_to_drive(target)
+
+            user_message += f"(image downloaded to {target})"
 
         agent_alias = current_agents.get(chat_id, "openai-mini")
         agent_to_use = agent_instances.get(chat_id)
