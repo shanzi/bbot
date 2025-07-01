@@ -157,8 +157,8 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
     if agent_to_use:
         try:
-            # Send typing action
-            await context.bot.send_chat_action(chat_id=chat_id, action=ChatAction.TYPING)
+            # Send a placeholder message immediately
+            placeholder_message = await update.message.reply_text("Thinking...", reply_to_message_id=update.message.message_id)
 
             # Get the actual BaseAgent instance from the AgentApp
             # Since we only have one agent per FastAgent instance, we can get the first one
@@ -171,11 +171,21 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             response_text = response_multipart.last_text()
 
             telegram_response = markdownify(response_text)
-            await update.message.reply_text(telegram_response, parse_mode=ParseMode.MARKDOWN_V2, reply_to_message_id=update.message.message_id)
+            await context.bot.edit_message_text(
+                chat_id=chat_id,
+                message_id=placeholder_message.message_id,
+                text=telegram_response,
+                parse_mode=ParseMode.MARKDOWN_V2
+            )
 
         except Exception as e:
             logger.error(f"Error communicating with {agent_alias} agent: {e}")
-            await update.message.reply_text(f"Sorry, I encountered an error with the {agent_alias} agent.")
+            error_message = f"Sorry, I encountered an error with the {agent_alias} agent: {e}"
+            await context.bot.edit_message_text(
+                chat_id=chat_id,
+                message_id=placeholder_message.message_id,
+                text=error_message
+            )
     else:
         await update.message.reply_text("Agent not initialized. Please contact the bot administrator.")
 
