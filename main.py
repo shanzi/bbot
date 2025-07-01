@@ -43,6 +43,13 @@ current_agents = {}
 # Dictionary to store initialized agent instances
 agent_instances = {}
 
+# Define supported models
+SUPPORTED_MODELS = {
+    "openai": "openai.gpt-4o-mini",
+    "claude": "anthropic.claude-3-5-sonnet-latest",
+    "gemini": "google.gemini-pro", # Example for Gemini, assuming it's configured in fastagent.config.yaml
+}
+
 # Get the local timezone dynamically
 try:
     local_timezone = datetime.datetime.now().astimezone().tzinfo
@@ -57,7 +64,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         "Use /switch_agent to change the active agent."
     )
     # Set default agent for the chat
-    current_agents[update.effective_chat.id] = "claude"
+    current_agents[update.effective_chat.id] = list(SUPPORTED_MODELS.keys())[0]
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Send a message when the command /help is issued."""
@@ -74,25 +81,25 @@ To talk to the agent, just send a message directly."""
     await update.message.reply_text(help_text)
 
 async def switch_agent(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Allows the user to switch between OpenAI and Claude agents."""
+    """Allows the user to switch between different AI models."""
     chat_id = update.effective_chat.id
-    current_agent_name = current_agents.get(chat_id, "claude") # Default to claude
+    current_model_alias = current_agents.get(chat_id, "claude") # Default to claude
 
     keyboard = [
-        ["openai.gpt-4o-mini", "anthropic.claude-3-5-sonnet-latest"]
+        [alias for alias in SUPPORTED_MODELS.keys()]
     ]
     reply_markup = ReplyKeyboardMarkup(keyboard, one_time_keyboard=True)
 
     await update.message.reply_text(
-        f"Your current agent is {current_agent_name.capitalize()}. Which agent would you like to switch to?",
+        f"Your current model is {current_model_alias.capitalize()}. Which model would you like to switch to?",
         reply_markup=reply_markup,
     )
 
 async def current_agent(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Shows the currently active agent for the chat."""
     chat_id = update.effective_chat.id
-    agent_name = current_agents.get(chat_id, "claude")
-    await update.message.reply_text(f"Your current agent is: {agent_name.capitalize()}")
+    agent_alias = current_agents.get(chat_id, "claude")
+    await update.message.reply_text(f"Your current agent is: {agent_alias.capitalize()}")
 
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -112,14 +119,11 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
         user_message += f"(attachment downloaded to {target})"
 
-    if user_message == "openai.gpt-4o-mini":
-        current_agents[chat_id] = "openai.gpt-4o-mini"
-        await update.message.reply_text("Switched to OpenAI (GPT-4o Mini) agent.")
-        return
-    elif user_message == "anthropic.claude-3-5-sonnet-latest":
-        current_agents[chat_id] = "anthropic.claude-3-5-sonnet-latest"
-        await update.message.reply_text("Switched to Claude (Claude 3.5 Sonnet) agent.")
-        return
+    for alias, model_name in SUPPORTED_MODELS.items():
+        if user_message.lower() == alias.lower():
+            current_agents[chat_id] = alias
+            await update.message.reply_text(f"Switched to {alias.capitalize()} agent (model: {model_name}).")
+            return
 
     agent_name = current_agents.get(chat_id, "claude")
     agent_to_use = agent_instances.get(agent_name)
@@ -152,14 +156,10 @@ async def post_init(application: Application) -> None:
     """Initialize agents and set bot commands after the bot is ready."""
     # Initialize agents
     global agent_instances
-    
-    openai_fast_app = get_fast_agent_app("openai.gpt-4o-mini")
-    async with openai_fast_app.run() as agent:
-        agent_instances["openai"] = agent
-
-    claude_fast_app = get_fast_agent_app("anthropic.claude-3-5-sonnet-latest")
-    async with claude_fast_app.run() as agent:
-        agent_instances["claude"] = agent
+    for alias, model_name in SUPPORTED_MODELS.items():
+        fast_app = get_fast_agent_app(model_name)
+        async with fast_app.run() as agent:
+            agent_instances[alias] = agent
 
     # Set bot commands for auto-completion menu
     await application.bot.set_my_commands([
