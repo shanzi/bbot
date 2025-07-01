@@ -6,8 +6,8 @@ import zoneinfo
 import time
 import utils
 
-from telegram import Update, ForceReply, ReplyKeyboardMarkup, BotCommand
-from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
+from telegram import Update, ForceReply, ReplyKeyboardMarkup, BotCommand, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes, CallbackQueryHandler
 from telegram.constants import ParseMode, ChatAction
 from telegramify_markdown import markdownify
 from dotenv import load_dotenv
@@ -34,8 +34,7 @@ logging.getLogger("httpx").setLevel(logging.WARNING)
 logger = logging.getLogger(__name__)
 
 # Agent instances (will be initialized later)
-openai_agent_instance = None
-claude_agent_instance = None
+
 
 # Dictionary to store the current agent for each chat
 current_agents = {}
@@ -61,15 +60,25 @@ try:
 except Exception:
     local_timezone = "UTC" # Fallback if timezone detection fails
 
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Send a message when the command /start is issued, and ask for model selection."""
     user = update.effective_user
     await update.message.reply_html(
         f"Hi {user.mention_html()}! I'm a bot that can talk to different AI models. "
         "Please choose a model to start our conversation."
     )
-    # Call switch_agent to present model selection
-    await switch_agent(update, context)
+
+    aliases = list(SUPPORTED_MODELS.keys())
+    keyboard = [
+        [InlineKeyboardButton(alias.capitalize(), callback_data=alias) for alias in aliases[i:i + 2]]
+        for i in range(0, len(aliases), 2)
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+
+    await update.message.reply_text(
+        "Which model would you like to use?",
+        reply_markup=reply_markup,
+    )
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Send a message when the command /help is issued."""
@@ -77,34 +86,19 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         """Here are the commands you can use:
 
 /start - Start a new conversation or reset the bot.
+/status - Show current bot's status.
 /help - Show this help message.
-/switch_agent - Change the active AI agent (OpenAI or Claude).
-/current_agent - Show which AI agent is currently active.
 
 To talk to the agent, just send a message directly."""
     )
     await update.message.reply_text(help_text)
 
-async def switch_agent(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Allows the user to switch between different AI models."""
-    chat_id = update.effective_chat.id
-    current_model_alias = current_agents.get(chat_id, "claude") # Default to claude
-
-    keyboard = [
-        [alias for alias in SUPPORTED_MODELS.keys()]
-    ]
-    reply_markup = ReplyKeyboardMarkup(keyboard, one_time_keyboard=True)
-
-    await update.message.reply_text(
-        f"Your current model is {current_model_alias.capitalize()}. Which model would you like to switch to?",
-        reply_markup=reply_markup,
-    )
-
-async def current_agent(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+async def status_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Shows the currently active agent for the chat."""
     chat_id = update.effective_chat.id
-    agent_alias = current_agents.get(chat_id, "claude")
-    await update.message.reply_text(f"Your current agent is: {agent_alias.capitalize()}")
+    agent_alias = current_agents.get(chat_id, "openai-mini")
+    agent_instance = agent_instances.get(chat_id)
+    await update.message.reply_text(f"Your current agent is: {agent_alias.capitalize()} (Initialized: {agent_instance is not None})")
 
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -124,27 +118,18 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
         user_message += f"(attachment downloaded to {target})"
 
-    for alias, model_name in SUPPORTED_MODELS.items():
-        if user_message.lower() == alias.lower():
-            current_agents[chat_id] = alias
-            # Reset agent context when switching models
-            if alias in agent_instances:
-                reset_agent_context(agent_instances[alias])
-            await update.message.reply_text(f"Switched to {alias.capitalize()} agent (model: {model_name}).")
-            return
-
-    agent_name = current_agents.get(chat_id, "claude")
-    agent_to_use = agent_instances.get(agent_name)
+    agent_alias = current_agents.get(chat_id, "claude")
+    agent_to_use = agent_instances.get(chat_id)
 
     if not agent_to_use:
-        model_name = SUPPORTED_MODELS.get(agent_name)
+        model_name = SUPPORTED_MODELS.get(agent_alias)
         if model_name:
             fast_app = get_fast_agent_app(model_name)
             async with fast_app.run() as agent:
-                agent_instances[agent_name] = agent
+                agent_instances[chat_id] = agent
                 agent_to_use = agent
         else:
-            await update.message.reply_text("Invalid agent selected. Please use /switch_agent.")
+            await update.message.reply_text("Invalid agent selected. Please use /start to select an agent.")
             return
 
     if agent_to_use:
@@ -166,21 +151,33 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             await update.message.reply_text(telegram_response, parse_mode=ParseMode.MARKDOWN_V2)
 
         except Exception as e:
-            logger.error(f"Error communicating with {agent_name} agent: {e}")
-            await update.message.reply_text(f"Sorry, I encountered an error with the {agent_name} agent.")
+            logger.error(f"Error communicating with {agent_alias} agent: {e}")
+            await update.message.reply_text(f"Sorry, I encountered an error with the {agent_alias} agent.")
     else:
         await update.message.reply_text("Agent not initialized. Please contact the bot administrator.")
 
-async def post_init(application: Application) -> None:
-    """Set bot commands after the bot is ready."""
-    # Set bot commands for auto-completion menu
-    await application.bot.set_my_commands([
-        BotCommand("start", "Start a new conversation or reset the bot"),
-        BotCommand("help", "Show available commands and their usage"),
-        BotCommand("switch_agent", "Change the active AI agent"),
-        BotCommand("current_agent", "Show which AI agent is currently active"),
-    ])
+async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    await query.answer()
 
+    chat_id = query.message.chat_id
+    selected_alias = query.data
+
+    if selected_alias in SUPPORTED_MODELS:
+        current_agents[chat_id] = selected_alias
+        # Reset agent context when switching models
+        agent_instances.pop(chat_id, None)
+        await query.edit_message_text(text=f"Switched to {selected_alias.capitalize()} agent (model: {SUPPORTED_MODELS[selected_alias]}).")
+    else:
+        await query.edit_message_text(text="Invalid model selection.")
+
+
+async def post_init(app):
+    await app.bot.set_my_commands([
+        BotCommand("start", "Start a new conversation or reset the bot."),
+        BotCommand("status", "Show current bot's status."),
+        BotCommand("help", "Show this help message."),
+    ])
 
 
 def main() -> None:
@@ -189,16 +186,19 @@ def main() -> None:
     application = Application.builder().token(TELEGRAM_BOT_TOKEN).post_init(post_init).build()
 
     # on different commands - answer in Telegram
-    application.add_handler(CommandHandler("start", start))
+    application.add_handler(CommandHandler("start", start_command))
+    application.add_handler(CommandHandler("status", status_command))
     application.add_handler(CommandHandler("help", help_command))
-    application.add_handler(CommandHandler("switch_agent", switch_agent))
-    application.add_handler(CommandHandler("current_agent", current_agent))
+
+    # Handle button presses
+    application.add_handler(CallbackQueryHandler(button_callback))
 
     # on non command messages - echo the message on Telegram
     application.add_handler(MessageHandler((filters.TEXT & ~filters.COMMAND) | filters.ATTACHMENT, handle_message))
 
     # Run the bot until the user presses Ctrl-C
     application.run_polling(allowed_updates=Update.ALL_TYPES)
+
 
 if __name__ == "__main__":
     main()
