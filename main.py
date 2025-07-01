@@ -46,10 +46,8 @@ agent_instances = {}
 SUPPORTED_MODELS = {
     "openai-mini": "openai.gpt-4o-mini",
     "openai-o3": "openai.o3",
-    "openai-o3-pro": "openai.o3-pro",
-    "claude-sonnet": "anthropic.claude-3-5-sonnet-latest",
-    "claude-opus": "anthropic.claude-3-opus-20240229",
-    "claude-haiku": "anthropic.claude-3-haiku-20240307",
+    "claude-sonnet-3": "anthropic.claude-3-7-sonnet-20250219",
+    "claude-sonnet-4": "anthropic.claude-sonnet-4-20250514",
     "gemini-pro": "google.gemini-pro",
     "gemini-flash": "google.gemini-2.5-flash",
 }
@@ -158,13 +156,13 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             file = await context.bot.get_file(photo.file_id)
             target_dir = utils.get_save_directory("pictures")
             os.makedirs(target_dir, exist_ok=True)
-            file_extension = photo.file_path.split('.')[-1] if photo.file_path else 'jpg'
+            file_extension = file.file_path.split('.')[-1] if file.file_path else 'jpg'
             target = os.path.join(target_dir, f"{int(time.time()*1000)}.{file_extension}")
             await file.download_to_drive(target)
 
             user_message += f"(image downloaded to {target})"
 
-        agent_alias = current_agents.get(chat_id, "openai-mini")
+        agent_alias = current_agents.get(chat_id, "claude-sonnet")
         agent_to_use = agent_instances.get(chat_id)
 
         if not agent_to_use:
