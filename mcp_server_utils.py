@@ -46,6 +46,38 @@ def pdf_to_text(file_path: str) -> str:
     except Exception as e:
         return f"An unexpected error occurred: {e}"
 
+@fast_mcp.tool()
+def pdf_to_images(file_path: str, output_directory: str = None) -> str:
+    """
+    Converts a PDF file into images (PNG format by default) using the 'pdftocairo' command-line tool.
+    Returns a message indicating the success or failure and the output directory.
+    """
+    try:
+        if not file_path.lower().endswith('.pdf'):
+            return f"Error: The provided file is not a PDF: {file_path}"
+
+        if output_directory is None:
+            output_directory = os.path.join(os.path.dirname(file_path), "pdf_images")
+        
+        os.makedirs(output_directory, exist_ok=True)
+
+        # pdftocairo -png input.pdf output_prefix
+        command = ["pdftocairo", "-png", file_path, os.path.join(output_directory, os.path.basename(file_path).replace('.pdf', ''))]
+        
+        result = subprocess.run(
+            command,
+            capture_output=True,
+            text=True,
+            check=True
+        )
+        return f"PDF successfully converted to images in: {output_directory}. Output: {result.stdout}"
+    except FileNotFoundError:
+        return "Error: 'pdftocairo' command not found. Please ensure it is installed and in your system's PATH."
+    except subprocess.CalledProcessError as e:
+        return f"Error converting PDF to images with pdftocairo: {e.stderr}"
+    except Exception as e:
+        return f"An unexpected error occurred: {e}"
+
 def main():
     fast_mcp.run()
 
