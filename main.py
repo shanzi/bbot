@@ -146,8 +146,11 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         model_name = SUPPORTED_MODELS.get(agent_alias)
         if model_name:
             fast_app = get_fast_agent_app(model_name)
-            agent_instances[chat_id] = await fast_app.run()
-            agent_to_use = agent_instances[chat_id]
+            # IMPORTANT: Use 'async with' to ensure proper FastAgent lifecycle management.
+            # Do not revert to 'await fast_app.run()' as it can lead to resource leaks.
+            async with fast_app.run() as agent:
+                agent_instances[chat_id] = agent
+                agent_to_use = agent_instances[chat_id]
         else:
             await update.message.reply_text("Invalid agent selected. Please use /start to select an agent.")
             return
