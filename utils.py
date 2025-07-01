@@ -15,8 +15,8 @@ def download_file(url: str, subdir: str, file_name: str):
     # Sanitize file_name to prevent directory traversal
     save_directory = get_save_directory(subdir)
     os.makedirs(save_directory, exist_ok=True)
-    sanitized_file_name = os.path.basename(file_name)
 
+    sanitized_file_name = os.path.basename(file_name)
     save_path = os.path.join(save_directory, sanitized_file_name)
 
     try:
