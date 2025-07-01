@@ -133,6 +133,17 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     agent_name = current_agents.get(chat_id, "claude")
     agent_to_use = agent_instances.get(agent_name)
 
+    if not agent_to_use:
+        model_name = SUPPORTED_MODELS.get(agent_name)
+        if model_name:
+            fast_app = get_fast_agent_app(model_name)
+            async with fast_app.run() as agent:
+                agent_instances[agent_name] = agent
+                agent_to_use = agent
+        else:
+            await update.message.reply_text("Invalid agent selected. Please use /switch_agent.")
+            return
+
     if agent_to_use:
         try:
             # Send typing action
@@ -158,14 +169,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         await update.message.reply_text("Agent not initialized. Please contact the bot administrator.")
 
 async def post_init(application: Application) -> None:
-    """Initialize agents and set bot commands after the bot is ready."""
-    # Initialize agents
-    global agent_instances
-    for alias, model_name in SUPPORTED_MODELS.items():
-        fast_app = get_fast_agent_app(model_name)
-        async with fast_app.run() as agent:
-            agent_instances[alias] = agent
-
+    """Set bot commands after the bot is ready."""
     # Set bot commands for auto-completion menu
     await application.bot.set_my_commands([
         BotCommand("start", "Start a new conversation or reset the bot"),
