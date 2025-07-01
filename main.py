@@ -98,7 +98,27 @@ async def status_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     chat_id = update.effective_chat.id
     agent_alias = current_agents.get(chat_id, "openai-mini")
     agent_instance = agent_instances.get(chat_id)
-    await update.message.reply_text(f"Your current agent is: {agent_alias.capitalize()} (Initialized: {agent_instance is not None})")
+
+    status_message = f"Your current agent is: **{agent_alias.capitalize()}**\n"
+    status_message += f"Initialized: **{agent_instance is not None}**\n\n"
+
+    if agent_instance:
+        # Get the actual BaseAgent instance
+        actual_agent = next(iter(agent_instance._agents.values()))
+
+        # Get context length
+        context_length = len(actual_agent.get_context())
+        status_message += f"Context Length: **{context_length}**\n"
+
+        # Get available tools
+        tools = actual_agent.get_tools()
+        if tools:
+            tool_names = [tool.name for tool in tools]
+            status_message += f"Available Tools: **{', '.join(tool_names)}**\n"
+        else:
+            status_message += "Available Tools: **None**\n"
+
+    await update.message.reply_text(status_message, parse_mode=ParseMode.MARKDOWN_V2)
 
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -118,16 +138,15 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
         user_message += f"(attachment downloaded to {target})"
 
-    agent_alias = current_agents.get(chat_id, "claude")
+    agent_alias = current_agents.get(chat_id, "openai-mini")
     agent_to_use = agent_instances.get(chat_id)
 
     if not agent_to_use:
         model_name = SUPPORTED_MODELS.get(agent_alias)
         if model_name:
             fast_app = get_fast_agent_app(model_name)
-            async with fast_app.run() as agent:
-                agent_instances[chat_id] = agent
-                agent_to_use = agent
+            agent_instances[chat_id] = fast_app.run()
+            agent_to_use = agent_instances[chat_id]
         else:
             await update.message.reply_text("Invalid agent selected. Please use /start to select an agent.")
             return
