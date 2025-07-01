@@ -168,7 +168,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             response_text = response_multipart.last_text()
 
             telegram_response = markdownify(response_text)
-            await update.message.reply_text(telegram_response, parse_mode=ParseMode.MARKDOWN_V2)
+            await update.message.reply_text(telegram_response, parse_mode=ParseMode.MARKDOWN_V2, reply_to_message_id=update.message.message_id)
 
         except Exception as e:
             logger.error(f"Error communicating with {agent_alias} agent: {e}")
