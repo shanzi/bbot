@@ -99,8 +99,8 @@ async def status_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     agent_alias = current_agents.get(chat_id, "openai-mini")
     agent_instance = agent_instances.get(chat_id)
 
-    status_message = f"Your current agent is: **{agent_alias.capitalize()}**\n"
-    status_message += f"Initialized: **{agent_instance is not None}**\n\n"
+    status_text = f"Your current agent is: **{agent_alias.capitalize()}**\n"
+    status_text += f"Initialized: **{agent_instance is not None}**\n\n"
 
     if agent_instance:
         # Get the actual BaseAgent instance
@@ -108,16 +108,17 @@ async def status_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
         # Get context length
         context_length = len(actual_agent.get_context())
-        status_message += f"Context Length: **{context_length}**\n"
+        status_text += f"Context Length: **{context_length}**\n"
 
         # Get available tools
         tools = actual_agent.get_tools()
         if tools:
-            tool_names = [tool.name for tool in tools]
-            status_message += f"Available Tools: **{', '.join(tool_names)}**\n"
+            tool_names = [f"`{tool.name}`" for tool in tools]
+            status_text += f"Available Tools: {', '.join(tool_names)}\n"
         else:
-            status_message += "Available Tools: **None**\n"
+            status_text += "Available Tools: **None**\n"
 
+    status_message = markdownify(status_text)
     await update.message.reply_text(status_message, parse_mode=ParseMode.MARKDOWN_V2)
 
 
