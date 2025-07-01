@@ -62,14 +62,14 @@ except Exception:
     local_timezone = "UTC" # Fallback if timezone detection fails
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Send a message when the command /start is issued."""
+    """Send a message when the command /start is issued, and ask for model selection."""
     user = update.effective_user
     await update.message.reply_html(
-        f"Hi {user.mention_html()}! I'm a bot that can talk to two different AI agents: OpenAI and Claude. "
-        "Use /switch_agent to change the active agent."
+        f"Hi {user.mention_html()}! I'm a bot that can talk to different AI models. "
+        "Please choose a model to start our conversation."
     )
-    # Set default agent for the chat
-    current_agents[update.effective_chat.id] = list(SUPPORTED_MODELS.keys())[0]
+    # Call switch_agent to present model selection
+    await switch_agent(update, context)
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Send a message when the command /help is issued."""
@@ -127,6 +127,9 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     for alias, model_name in SUPPORTED_MODELS.items():
         if user_message.lower() == alias.lower():
             current_agents[chat_id] = alias
+            # Reset agent context when switching models
+            if alias in agent_instances:
+                reset_agent_context(agent_instances[alias])
             await update.message.reply_text(f"Switched to {alias.capitalize()} agent (model: {model_name}).")
             return
 
@@ -176,19 +179,9 @@ async def post_init(application: Application) -> None:
         BotCommand("help", "Show available commands and their usage"),
         BotCommand("switch_agent", "Change the active AI agent"),
         BotCommand("current_agent", "Show which AI agent is currently active"),
-        BotCommand("clear_context", "Clear the current agent's conversation context"),
     ])
 
-async def clear_context_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Clears the context of the currently active agent."""
-    agent_name = current_agents.get(chat_id, "claude")
-    agent_to_use = agent_instances.get(agent_name)
-    
-    if agent_to_use:
-        reset_agent_context(agent_to_use)
-        await update.message.reply_text(f"Context for {agent_name.capitalize()} agent has been cleared.")
-    else:
-        await update.message.reply_text("No active agent to clear context for.")
+
 
 def main() -> None:
     """Start the bot."""
@@ -200,7 +193,6 @@ def main() -> None:
     application.add_handler(CommandHandler("help", help_command))
     application.add_handler(CommandHandler("switch_agent", switch_agent))
     application.add_handler(CommandHandler("current_agent", current_agent))
-    application.add_handler(CommandHandler("clear_context", clear_context_command))
 
     # on non command messages - echo the message on Telegram
     application.add_handler(MessageHandler((filters.TEXT & ~filters.COMMAND) | filters.ATTACHMENT, handle_message))
