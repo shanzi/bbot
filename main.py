@@ -45,9 +45,14 @@ agent_instances = {}
 
 # Define supported models
 SUPPORTED_MODELS = {
-    "openai": "openai.gpt-4o-mini",
-    "claude": "anthropic.claude-3-5-sonnet-latest",
-    "gemini": "google.gemini-pro", # Example for Gemini, assuming it's configured in fastagent.config.yaml
+    "openai-mini": "openai.gpt-4o-mini",
+    "openai-o3": "openai.o3",
+    "openai-o3-pro": "openai.o3-pro",
+    "claude-sonnet": "anthropic.claude-3-5-sonnet-latest",
+    "claude-opus": "anthropic.claude-3-opus-20240229",
+    "claude-haiku": "anthropic.claude-3-haiku-20240307",
+    "gemini-pro": "google.gemini-pro",
+    "gemini-flash": "google.gemini-2.5-flash",
 }
 
 # Get the local timezone dynamically
