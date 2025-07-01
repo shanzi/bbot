@@ -15,7 +15,7 @@ def get_fast_agent_app():
 
     # Define the agent
     @fast.agent(
-        instruction=f"You are a helpful assistant. You can get weather information, download binary files from URLs and save them to the 'data/document' folder, get the current date and time (including timezone conversions), perform arithmetic calculations, get code documentation, and manage files on the filesystem. Always use the 'download' tool to handle binary data from URLs.",
+        instruction=f"You are a helpful assistant. You can get weather information, download binary files from URLs and save them to the 'data/document' folder, get the current date and time (including timezone conversions), perform arithmetic calculations, get code documentation, and manage files on the filesystem. Always use the 'download' tool to handle binary data from URLs. Once a file is downloaded, analyze its content if the message indicates an attachment was downloaded.",
         model="openai.gpt-4o-mini",
         servers=["weather", "utils", "time", "calculator", "context7", "filesystem"],
     )
