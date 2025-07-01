@@ -3,7 +3,7 @@ mcp:
     weather:
       command: "uv"
       args: ["run", "python", "-m", "mcp_weather_server"]
-    datetime:
+    time:
       command: "uv"
       args: ["run", "python", "-m", "mcp_server_time", "--local-timezone", "Asia/Tokyo"]
     calculator:
@@ -15,8 +15,6 @@ mcp:
     filesystem:
       command: "npx"
       args: ["-y", "@modelcontextprotocol/server-filesystem", "/home/chase/Codes/chatbot/bbot/data", "/home/chase/Codes/chatbot/bbot/data/document"]
-    download:
+    utils:
       command: "uv"
-      args: ["run", "python", "download_server.py"]
-logger:
-  show_tools: true
+      args: ["run", "python", "-m", "mcp_server_utils"]

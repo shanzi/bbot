@@ -3,6 +3,8 @@ import logging
 import os
 import datetime
 import zoneinfo
+import time
+import utils
 
 from telegram import Update, ForceReply, ReplyKeyboardMarkup, BotCommand
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
@@ -90,53 +92,23 @@ async def current_agent(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     agent_name = current_agents.get(chat_id, "claude")
     await update.message.reply_text(f"Your current agent is: {agent_name.capitalize()}")
 
+
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Handle incoming messages, including text and documents."""
+    """Handle incoming text messages."""
     chat_id = update.effective_chat.id
 
-    if update.message.document:
-        await context.bot.send_chat_action(chat_id=chat_id, action=ChatAction.UPLOAD_DOCUMENT)
-        document = update.message.document
-        file_id = document.file_id
-        file_name = document.file_name
-
-        try:
-            # Get the file object from Telegram to get its file_path
-            telegram_file = await context.bot.get_file(file_id)
-            file_url = f"https://api.telegram.org/file/bot{TELEGRAM_BOT_TOKEN}/{telegram_file.file_path}"
-
-            # Get the active agent
-            agent_name = current_agents.get(chat_id, "claude")
-            agent_to_use = None
-            if agent_name == "openai":
-                agent_to_use = openai_agent_instance
-            elif agent_name == "claude":
-                agent_to_use = claude_agent_instance
-
-            if agent_to_use:
-                # Get the actual BaseAgent instance from the AgentApp
-                actual_agent = next(iter(agent_to_use._agents.values()))
-
-                # Call the download.download_file tool
-                tool_result = await actual_agent.aggregator.call_tool(
-                    "download.download_file", {"url": file_url, "file_name": file_name}
-                )
-                
-                if tool_result.isError:
-                    await update.message.reply_text(f"Failed to download file: {tool_result.content[0].text}")
-                else:
-                    await update.message.reply_text(f"Document '{file_name}' downloaded and saved: {tool_result.content[0].text}")
-
-            else:
-                await update.message.reply_text("Agent not initialized. Please contact the bot administrator.")
-
-        except Exception as e:
-            logger.error(f"Error handling document: {e}")
-            await update.message.reply_text(f"Sorry, I encountered an error while processing your document: {e}")
-        return
-
     # Handle text messages
-    user_message = update.message.text
+    user_message = update.message.text or ""
+    
+    if update.message.document:
+        doc = update.message.document
+        file = await context.bot.get_file(doc.file_id)
+        target_dir = utils.get_save_directory("attachment")
+        os.makedirs(target_dir, exist_ok=True)
+        target = os.path.join(target_dir, f"{int(time.time()*1000)}--{doc.file_name}")
+        await file.download_to_drive(target)
+
+        user_message += f"(attachment downloaded to {target})"
 
     if user_message == "OpenAI":
         current_agents[chat_id] = "openai"
@@ -166,7 +138,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             # Get the actual BaseAgent instance from the AgentApp
             # Since we only have one agent per FastAgent instance, we can get the first one
             actual_agent = next(iter(agent_to_use._agents.values()))
-
+            
             # Generate the response as a PromptMessageMultipart object
             response_multipart = await actual_agent.generate([actual_agent._normalize_message_input(user_message)], None)
 
@@ -216,8 +188,7 @@ def main() -> None:
     application.add_handler(CommandHandler("current_agent", current_agent))
 
     # on non command messages - echo the message on Telegram
-    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
-    application.add_handler(MessageHandler(filters.Document, handle_message))
+    application.add_handler(MessageHandler((filters.TEXT & ~filters.COMMAND) | filters.ATTACHMENT, handle_message))
 
     # Run the bot until the user presses Ctrl-C
     application.run_polling(allowed_updates=Update.ALL_TYPES)
