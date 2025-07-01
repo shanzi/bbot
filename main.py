@@ -48,7 +48,7 @@ SUPPORTED_MODELS = {
     "openai-o3": "openai.o3",
     "claude-sonnet-3": "anthropic.claude-3-7-sonnet-20250219",
     "claude-sonnet-4": "anthropic.claude-sonnet-4-20250514",
-    "gemini-pro": "google.gemini-pro",
+    "gemini-pro": "google.gemini-2.5-pro",
     "gemini-flash": "google.gemini-2.5-flash",
 }
 
@@ -94,7 +94,7 @@ To talk to the agent, just send a message directly."""
 async def status_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Shows the currently active agent for the chat."""
     chat_id = update.effective_chat.id
-    agent_alias = current_agents.get(chat_id, "openai-mini")
+    agent_alias = current_agents.get(chat_id, "claude-sonnet-3")
     agent_instance = agent_instances.get(chat_id)
 
     status_text = f"Your current agent is: **{agent_alias.capitalize()}**\n"
@@ -104,20 +104,50 @@ async def status_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         # Get the actual BaseAgent instance
         actual_agent = next(iter(agent_instance._agents.values()))
 
-        # Get context length
-        context_length = len(actual_agent.get_context())
-        status_text += f"Context Length: **{context_length}**\n"
+        # Get context length and token count
+        context_length = len(actual_agent.message_history)
+        estimated_tokens = utils.estimate_tokens(actual_agent.message_history)
 
-        # Get available tools
-        tools = actual_agent.get_tools()
-        if tools:
-            tool_names = [f"`{tool.name}`" for tool in tools]
-            status_text += f"Available Tools: {', '.join(tool_names)}\n"
-        else:
-            status_text += "Available Tools: **None**\n"
+        status_text += f"Context Length: **{context_length}** messages\n"
+        status_text += f"Estimated Tokens: **~{estimated_tokens}**\n"
 
     status_message = markdownify(status_text)
     await update.message.reply_text(status_message, parse_mode=ParseMode.MARKDOWN_V2)
+
+
+async def trim_context_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Trims the agent's context to a specific number of messages."""
+    chat_id = update.effective_chat.id
+    agent_instance = agent_instances.get(chat_id)
+
+    if not agent_instance:
+        await update.message.reply_text("Agent not initialized. Please start a conversation first.")
+        return
+
+    try:
+        keep_count = int(context.args[0])
+    except (IndexError, ValueError):
+        await update.message.reply_text("Please provide the number of recent messages to keep.\nUsage: /trim_context <number>")
+        return
+
+    actual_agent = next(iter(agent_instance._agents.values()))
+    original_length = len(actual_agent.message_history)
+
+    if keep_count >= original_length:
+        await update.message.reply_text(f"Context length is already {original_length}. No trimming needed.")
+        return
+
+    if keep_count < 0:
+        await update.message.reply_text("Number of messages to keep cannot be negative.")
+        return
+        
+    actual_agent.message_history = actual_agent.message_history[-keep_count:]
+    new_length = len(actual_agent.message_history)
+
+    await update.message.reply_text(f"Context trimmed from {original_length} to {new_length} messages.")
+
+
+
 
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -162,7 +192,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
             user_message += f"(image downloaded to {target})"
 
-        agent_alias = current_agents.get(chat_id, "claude-sonnet")
+        agent_alias = current_agents.get(chat_id, "claude-sonnet-3")
         agent_to_use = agent_instances.get(chat_id)
 
         if not agent_to_use:
@@ -197,6 +227,10 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         # Since we only have one agent per FastAgent instance, we can get the first one
         actual_agent = next(iter(agent_to_use._agents.values()))
         
+        # Log the estimated token count
+        estimated_tokens = utils.estimate_tokens(actual_agent.message_history)
+        logger.info(f"Calling agent with ~{estimated_tokens} tokens.")
+
         # Generate the response as a PromptMessageMultipart object
         response_multipart = await actual_agent.generate([actual_agent._normalize_message_input(user_message)], None)
 
@@ -260,6 +294,7 @@ def main() -> None:
     application.add_handler(CommandHandler("start", start_command))
     application.add_handler(CommandHandler("status", status_command))
     application.add_handler(CommandHandler("help", help_command))
+    application.add_handler(CommandHandler("trim_context", trim_context_command))
 
     # Handle button presses
     application.add_handler(CallbackQueryHandler(button_callback))
