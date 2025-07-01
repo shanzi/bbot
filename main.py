@@ -155,10 +155,88 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             await update.message.reply_text("Invalid agent selected. Please use /start to select an agent.")
             return
 
-    if agent_to_use:
-        try:
-            # Send a placeholder message immediately
-            placeholder_message = await update.message.reply_text("Thinking...", reply_to_message_id=update.message.message_id)
+    # Send an initial placeholder message immediately
+    placeholder_message = await update.message.reply_text("Initializing...", reply_to_message_id=update.message.message_id)
+
+    try:
+        # Handle text messages
+        user_message = update.message.text or ""
+        
+        if update.message.document:
+            await context.bot.edit_message_text(
+                chat_id=chat_id,
+                message_id=placeholder_message.message_id,
+                text="Downloading attachment..."
+            )
+            doc = update.message.document
+            file = await context.bot.get_file(doc.file_id)
+            target_dir = utils.get_save_directory("attachment")
+            os.makedirs(target_dir, exist_ok=True)
+            target = os.path.join(target_dir, f"{int(time.time()*1000)}--{doc.file_name}")
+            await file.download_to_drive(target)
+
+            user_message += f"(attachment downloaded to {target})"
+
+        agent_alias = current_agents.get(chat_id, "openai-mini")
+        agent_to_use = agent_instances.get(chat_id)
+
+        if not agent_to_use:
+            model_name = SUPPORTED_MODELS.get(agent_alias)
+            if model_name:
+                await context.bot.edit_message_text(
+                    chat_id=chat_id,
+                    message_id=placeholder_message.message_id,
+                    text=f"Loading {agent_alias.capitalize()} agent..."
+                )
+                fast_app = get_fast_agent_app(model_name)
+                # IMPORTANT: Use 'async with' to ensure proper FastAgent lifecycle management.
+                # Do not revert to 'await fast_app.run()' as it can lead to resource leaks.
+                async with fast_app.run() as agent:
+                    agent_instances[chat_id] = agent
+                    agent_to_use = agent_instances[chat_id]
+            else:
+                await context.bot.edit_message_text(
+                    chat_id=chat_id,
+                    message_id=placeholder_message.message_id,
+                    text="Invalid agent selected. Please use /start to select an agent."
+                )
+                return
+
+        # Now that agent_to_use is guaranteed to be set (or we returned), proceed with thinking
+        await context.bot.edit_message_text(
+            chat_id=chat_id,
+            message_id=placeholder_message.message_id,
+            text="Thinking..."
+        )
+        # Get the actual BaseAgent instance from the AgentApp
+        # Since we only have one agent per FastAgent instance, we can get the first one
+        actual_agent = next(iter(agent_to_use._agents.values()))
+        
+        # Generate the response as a PromptMessageMultipart object
+        response_multipart = await actual_agent.generate([actual_agent._normalize_message_input(user_message)], None)
+
+        # Get only the last text content (final assistant response)
+        response_text = response_multipart.last_text()
+
+        telegram_response = markdownify(response_text)
+        await context.bot.edit_message_text(
+            chat_id=chat_id,
+            message_id=placeholder_message.message_id,
+            text=telegram_response,
+            parse_mode=ParseMode.MARKDOWN_V2
+        )
+
+    except Exception as e:
+        logger.error(f"Error communicating with {agent_alias} agent: {e}")
+        error_message = f"Sorry, I encountered an error with the {agent_alias} agent: {e}"
+        await context.bot.edit_message_text(
+            chat_id=chat_id,
+            message_id=placeholder_message.message_id,
+            text=error_message
+        )
+    # Removed the redundant else block here, as the error handling or return statements
+    # already cover all cases where agent_to_use might not be initialized.
+    # The previous 'else' block was unreachable due to the 'return' statement above.
 
             # Get the actual BaseAgent instance from the AgentApp
             # Since we only have one agent per FastAgent instance, we can get the first one
