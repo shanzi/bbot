@@ -23,6 +23,9 @@ def get_fast_agent_app():
         pass # This agent will be controlled externally
     return fast
 
+def reset_agent_context(agent_app: FastAgent):
+    agent_app.reset()
+
 async def main():
     fast_app = get_fast_agent_app()
     async with fast_app.run() as agent:

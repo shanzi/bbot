@@ -174,7 +174,28 @@ async def post_init(application: Application) -> None:
         BotCommand("help", "Show available commands and their usage"),
         BotCommand("switch_agent", "Change the active AI agent"),
         BotCommand("current_agent", "Show which AI agent is currently active"),
+        BotCommand("clear_context", "Clear the current agent's conversation context"),
     ])
+
+async def clear_context_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Clears the context of the currently active agent."""
+    chat_id = update.effective_chat.id
+    agent_name = current_agents.get(chat_id, "claude")
+    agent_to_use = None
+
+    if agent_name == "openai":
+        agent_to_use = openai_agent_instance
+    elif agent_name == "claude":
+        agent_to_use = claude_agent_instance
+    
+    if agent_to_use:
+        if agent_name == "openai":
+            openai_agent.reset_agent_context(agent_to_use)
+        elif agent_name == "claude":
+            claude_agent.reset_agent_context(agent_to_use)
+        await update.message.reply_text(f"Context for {agent_name.capitalize()} agent has been cleared.")
+    else:
+        await update.message.reply_text("No active agent to clear context for.")
 
 def main() -> None:
     """Start the bot."""
@@ -186,6 +207,7 @@ def main() -> None:
     application.add_handler(CommandHandler("help", help_command))
     application.add_handler(CommandHandler("switch_agent", switch_agent))
     application.add_handler(CommandHandler("current_agent", current_agent))
+    application.add_handler(CommandHandler("clear_context", clear_context_command))
 
     # on non command messages - echo the message on Telegram
     application.add_handler(MessageHandler((filters.TEXT & ~filters.COMMAND) | filters.ATTACHMENT, handle_message))
