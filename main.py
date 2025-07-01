@@ -13,8 +13,7 @@ from telegramify_markdown import markdownify
 from dotenv import load_dotenv
 
 from mcp_agent.core.fastagent import FastAgent
-from openai_agent import get_fast_agent_app as get_openai_agent_app
-from claude_agent import get_fast_agent_app as get_claude_agent_app
+from agent_factory import get_fast_agent_app, reset_agent_context
 
 # Load environment variables from .env file
 load_dotenv()
@@ -40,6 +39,9 @@ claude_agent_instance = None
 
 # Dictionary to store the current agent for each chat
 current_agents = {}
+
+# Dictionary to store initialized agent instances
+agent_instances = {}
 
 # Get the local timezone dynamically
 try:
@@ -77,7 +79,7 @@ async def switch_agent(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     current_agent_name = current_agents.get(chat_id, "claude") # Default to claude
 
     keyboard = [
-        ["OpenAI", "Claude"]
+        ["openai.gpt-4o-mini", "anthropic.claude-3-5-sonnet-latest"]
     ]
     reply_markup = ReplyKeyboardMarkup(keyboard, one_time_keyboard=True)
 
@@ -110,25 +112,17 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
         user_message += f"(attachment downloaded to {target})"
 
-    if user_message == "OpenAI":
-        current_agents[chat_id] = "openai"
-        await update.message.reply_text("Switched to OpenAI agent.")
+    if user_message == "openai.gpt-4o-mini":
+        current_agents[chat_id] = "openai.gpt-4o-mini"
+        await update.message.reply_text("Switched to OpenAI (GPT-4o Mini) agent.")
         return
-    elif user_message == "Claude":
-        current_agents[chat_id] = "claude"
-        await update.message.reply_text("Switched to Claude agent.")
+    elif user_message == "anthropic.claude-3-5-sonnet-latest":
+        current_agents[chat_id] = "anthropic.claude-3-5-sonnet-latest"
+        await update.message.reply_text("Switched to Claude (Claude 3.5 Sonnet) agent.")
         return
 
     agent_name = current_agents.get(chat_id, "claude")
-    agent_to_use = None
-
-    if agent_name == "openai":
-        agent_to_use = openai_agent_instance
-    elif agent_name == "claude":
-        agent_to_use = claude_agent_instance
-    else:
-        await update.message.reply_text("Invalid agent selected. Please use /switch_agent.")
-        return
+    agent_to_use = agent_instances.get(agent_name)
 
     if agent_to_use:
         try:
@@ -156,17 +150,16 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
 async def post_init(application: Application) -> None:
     """Initialize agents and set bot commands after the bot is ready."""
-    global openai_agent_instance, claude_agent_instance
-
-    # Initialize OpenAI Agent
-    openai_fast_app = get_openai_agent_app()
+    # Initialize agents
+    global agent_instances
+    
+    openai_fast_app = get_fast_agent_app("openai.gpt-4o-mini")
     async with openai_fast_app.run() as agent:
-        openai_agent_instance = agent
+        agent_instances["openai"] = agent
 
-    # Initialize Claude Agent
-    claude_fast_app = get_claude_agent_app()
+    claude_fast_app = get_fast_agent_app("anthropic.claude-3-5-sonnet-latest")
     async with claude_fast_app.run() as agent:
-        claude_agent_instance = agent
+        agent_instances["claude"] = agent
 
     # Set bot commands for auto-completion menu
     await application.bot.set_my_commands([
@@ -179,20 +172,11 @@ async def post_init(application: Application) -> None:
 
 async def clear_context_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Clears the context of the currently active agent."""
-    chat_id = update.effective_chat.id
     agent_name = current_agents.get(chat_id, "claude")
-    agent_to_use = None
-
-    if agent_name == "openai":
-        agent_to_use = openai_agent_instance
-    elif agent_name == "claude":
-        agent_to_use = claude_agent_instance
+    agent_to_use = agent_instances.get(agent_name)
     
     if agent_to_use:
-        if agent_name == "openai":
-            openai_agent.reset_agent_context(agent_to_use)
-        elif agent_name == "claude":
-            claude_agent.reset_agent_context(agent_to_use)
+        reset_agent_context(agent_to_use)
         await update.message.reply_text(f"Context for {agent_name.capitalize()} agent has been cleared.")
     else:
         await update.message.reply_text("No active agent to clear context for.")
