@@ -277,6 +277,20 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         await query.edit_message_text(text="Invalid model selection.")
 
 
+async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Log the error and send a telegram message to notify the user."""
+    logger.error("Exception while handling an update:", exc_info=context.error)
+
+    # Clear the agent for the current chat on error
+    if update and hasattr(update, 'effective_chat') and update.effective_chat:
+        chat_id = update.effective_chat.id
+        if chat_id in agent_instances:
+            agent_instances.pop(chat_id)
+            logger.info(f"Agent for chat_id {chat_id} has been cleared due to an error.")
+            await update.effective_chat.send_message(
+                "An error occurred and my session has been reset. Please try again."
+            )
+
 async def post_init(app):
     await app.bot.set_my_commands([
         BotCommand("start", "Start a new conversation or reset the bot."),
@@ -289,6 +303,9 @@ def main() -> None:
     """Start the bot."""
     # Create the Application and pass it your bot's token.
     application = Application.builder().token(TELEGRAM_BOT_TOKEN).post_init(post_init).build()
+
+    # Register the error handler
+    application.add_error_handler(error_handler)
 
     # on different commands - answer in Telegram
     application.add_handler(CommandHandler("start", start_command))
