@@ -33,10 +33,15 @@ def download_file(url: str, subdir: str, file_name: str):
         raise ValueError(f"An unexpected error occurred during download: {e}")
 
 
+import tiktoken
+
+# Get the encoding for a default model.
+# cl100k_base is the encoding used by gpt-4, gpt-3.5-turbo, and text-embedding-ada-002.
+encoding = tiktoken.get_encoding("cl100k_base")
+
 def estimate_tokens(message_history: list) -> int:
     """
-    Estimates the token count of a message history.
-    1 token is roughly equal to 4 characters of text.
+    Estimates the token count of a message history using the tiktoken library.
     """
     token_count = 0
     for message in message_history:
@@ -44,11 +49,11 @@ def estimate_tokens(message_history: list) -> int:
         # content can be a string or a list of content blocks
         content = message.content
         if isinstance(content, str):
-            token_count += len(content)
+            token_count += len(encoding.encode(content))
         elif isinstance(content, list):
             for block in content:
                 if isinstance(block, str):
-                    token_count += len(block)
+                    token_count += len(encoding.encode(block))
                 elif hasattr(block, 'text'):
-                    token_count += len(block.text)
-    return token_count // 4
+                    token_count += len(encoding.encode(block.text))
+    return token_count

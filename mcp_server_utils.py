@@ -3,6 +3,7 @@ import utils
 import tempfile
 import subprocess
 from mcp.server.fastmcp.server import FastMCP
+import tiktoken
 
 fast_mcp = FastMCP("mcp-server-utils")
 
@@ -20,11 +21,19 @@ def download_file(url: str, subdirectory: str, file_name: str) -> str:
     except Exception as e:
         return f"Failed to download file {url}: {e}"
 
+import tiktoken
+
+# Get the encoding for a default model.
+# cl100k_base is the encoding used by gpt-4, gpt-3.5-turbo, and text-embedding-ada-002.
+encoding = tiktoken.get_encoding("cl100k_base")
+
 @fast_mcp.tool()
-def pdf_to_text(file_path: str) -> str:
+def pdf_to_text(file_path: str, truncate_limit_tokens: int = 500) -> str:
     """
     Converts a PDF file to plain text using the 'pdftotext' command-line tool.
-    Returns the extracted text content as a string.
+    By default, the returned text is truncated to 500 tokens.
+    The agent can specify a different `truncate_limit_tokens` to get more or less text.
+    Set `truncate_limit_tokens` to 0 to get the full text.
     """
     try:
         # Ensure the file exists and is a PDF
@@ -38,13 +47,24 @@ def pdf_to_text(file_path: str) -> str:
             text=True,
             check=True
         )
-        return result.stdout
+        
+        full_text = result.stdout
+        
+        if truncate_limit_tokens > 0:
+            tokens = encoding.encode(full_text)
+            if len(tokens) > truncate_limit_tokens:
+                truncated_tokens = tokens[:truncate_limit_tokens]
+                return encoding.decode(truncated_tokens) + "\n\n... (truncated)"
+
+        return full_text
+        
     except FileNotFoundError:
         return "Error: 'pdftotext' command not found. Please ensure it is installed and in your system's PATH."
     except subprocess.CalledProcessError as e:
         return f"Error converting PDF with pdftotext: {e.stderr}"
     except Exception as e:
         return f"An unexpected error occurred: {e}"
+
 
 @fast_mcp.tool()
 def pdf_to_images(file_path: str, output_directory: str = None) -> str:
