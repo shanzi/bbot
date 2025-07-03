@@ -98,6 +98,18 @@ def pdf_to_images(file_path: str, output_directory: str = None) -> str:
     except Exception as e:
         return f"An unexpected error occurred: {e}"
 
+@fast_mcp.tool()
+def save_summary(summary: str, file_path: str) -> str:
+    """
+    Saves the given summary to a file.
+    The file will be saved in the same directory as the original document.
+    """
+    try:
+        utils.save_summary(summary, file_path)
+        return f"Summary successfully saved to {file_path}"
+    except Exception as e:
+        return f"Failed to save summary to {file_path}: {e}"
+
 def main():
     fast_mcp.run()
 

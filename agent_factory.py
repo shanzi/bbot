@@ -24,7 +24,9 @@ def get_fast_agent_app(model_name: str):
             "Uploaded attachments are saved to the 'attachment' folder. For URLs, you must use the `download_file` tool to save the document to the appropriate subdirectory in the 'data' folder (e.g. 'data/document'). "
             "After the document is in the correct location with the correct name, you must analyze its content. For binary documents like PDFs or Word files, "
             "you should extract their text content. To do this efficiently, first use a small `truncate_limit_tokens` (e.g., 200) to get a summary. "
-            "If you need more detail, you can call the tool again with a larger limit or with the limit set to 0 to get the full text.\n\n"
+            "After generating a summary, save it as a Markdown file with the same name as the document, but with a '.md' extension. "
+            "For example, if the document is 'My Awesome Document.pdf', the summary file should be 'My Awesome Document.md'. "
+            "In the future, when asked about the document's content, you can refer to this Markdown file for a quick summary.\n\n"
             "You can also get weather information, get the current date and time, perform arithmetic calculations, "
             "and manage files. However, your core purpose is to be a document management assistant."
         ),

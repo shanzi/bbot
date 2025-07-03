@@ -33,6 +33,17 @@ def download_file(url: str, subdir: str, file_name: str):
         raise ValueError(f"An unexpected error occurred during download: {e}")
 
 
+def save_summary(summary: str, file_path: str):
+    """
+    Saves the given summary to a file.
+    """
+    try:
+        with open(file_path, "w") as f:
+            f.write(summary)
+    except Exception as e:
+        raise ValueError(f"An unexpected error occurred during summary saving: {e}")
+
+
 import tiktoken
 
 # Get the encoding for a default model.
