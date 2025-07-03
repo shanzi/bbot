@@ -69,11 +69,11 @@ def pdf_to_text(file_path: str, truncate_limit_tokens: int = 500) -> str:
 
 
 @fast_mcp.tool()
-def pdf_to_images(file_path: str, pages: str = "1", image_format: str = "jpeg", size: int = 1024) -> str:
+def pdf_to_images(file_path: str, pages: list[int] = [1], image_format: str = "jpeg", size: int = 1024) -> str:
     """
     Converts selected pages of a PDF file into images using the 'pdftocairo' command-line tool.
-    By default, it only converts the first page to a 1024px wide PNG image.
-    The agent can specify a different page or range of pages, image format (png, jpeg, tiff, ps, eps, svg), and size.
+    By default, it only converts the first page to a 1024px wide jpeg image.
+    The agent can specify a different page or list of pages, image format (png, jpeg, tiff, ps, eps, svg), and size.
     The output directory will be 'data/document/thumbnail'.
     Returns a message indicating the success or failure and the output directory.
     """
@@ -84,26 +84,27 @@ def pdf_to_images(file_path: str, pages: str = "1", image_format: str = "jpeg", 
         output_directory = utils.get_save_directory("document", "thumbnail")
         os.makedirs(output_directory, exist_ok=True)
 
-        command = [
-            "pdftocairo", 
-            f"-{image_format}", 
-            "-f", 
-            pages, 
-            "-l", 
-            pages, 
-            "-scale-to",
-            str(size),
-            file_path, 
-            os.path.join(output_directory, os.path.basename(file_path).replace('.pdf', ''))
-        ]
-        
-        result = subprocess.run(
-            command,
-            capture_output=True,
-            text=True,
-            check=True
-        )
-        return f"PDF successfully converted to images in: {output_directory}. Output: {result.stdout}"
+        for page in pages:
+            command = [
+                "pdftocairo", 
+                f"-{image_format}", 
+                "-f", 
+                str(page), 
+                "-l", 
+                str(page), 
+                "-scale-to",
+                str(size),
+                file_path, 
+                os.path.join(output_directory, f"{os.path.basename(file_path).replace('.pdf', '')}_{page}")
+            ]
+            
+            result = subprocess.run(
+                command,
+                capture_output=True,
+                text=True,
+                check=True
+            )
+        return f"PDF successfully converted to images in: {output_directory}."
     except FileNotFoundError:
         return "Error: 'pdftocairo' command not found. Please ensure it is installed and in your system's PATH."
     except subprocess.CalledProcessError as e:
@@ -141,6 +142,29 @@ def trim_pdf_margins(file_path: str, uniform_order_stat: int = 1) -> str:
         return "Error: 'pdfcropmargins' command not found. Please ensure it is installed and in your system's PATH."
     except subprocess.CalledProcessError as e:
         return f"Error trimming PDF margins with pdfcropmargins: {e.stderr}"
+    except Exception as e:
+        return f"An unexpected error occurred: {e}"
+
+@fast_mcp.tool()
+def get_pdf_info(file_path: str) -> str:
+    """
+    Returns information about a PDF file using the 'pdfinfo' command-line tool.
+    """
+    try:
+        if not file_path.lower().endswith('.pdf'):
+            return f"Error: The provided file is not a PDF: {file_path}"
+
+        result = subprocess.run(
+            ["pdfinfo", file_path],
+            capture_output=True,
+            text=True,
+            check=True
+        )
+        return result.stdout
+    except FileNotFoundError:
+        return "Error: 'pdfinfo' command not found. Please ensure it is installed and in your system's PATH."
+    except subprocess.CalledProcessError as e:
+        return f"Error getting PDF info with pdfinfo: {e.stderr}"
     except Exception as e:
         return f"An unexpected error occurred: {e}"
 

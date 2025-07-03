@@ -1,12 +1,13 @@
 import asyncio
 import logging
 import os
+import re
 import datetime
 import zoneinfo
 import time
 import utils
 
-from telegram import Update, ForceReply, ReplyKeyboardMarkup, BotCommand, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import Update, ForceReply, ReplyKeyboardMarkup, ReplyKeyboardRemove, BotCommand, InlineKeyboardButton, InlineKeyboardMarkup, InputMediaPhoto
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes, CallbackQueryHandler
 from telegram.constants import ParseMode, ChatAction
 from telegramify_markdown import markdownify
@@ -237,15 +238,11 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         # Get only the last text content (final assistant response)
         response_text = response_multipart.last_text()
 
-        # Check if the response ends with a file path
-        parts = response_text.strip().split('@@FILE_PATH@@')
-        file_path_to_send = None
-
-        if len(parts) == 2:
-            response_text = parts[0].strip()
-            file_path_to_send = parts[1].strip()
-            if not (os.path.isabs(file_path_to_send) and os.path.exists(file_path_to_send)):
-                file_path_to_send = None
+        # Find all image tags in the response
+        image_tags = re.findall(r'!\[(.*?)\]\((.*?)\)', response_text)
+        
+        # Remove image tags from the response text, replacing them with the alt text in italics
+        response_text = re.sub(r'!\[(.*?)\]\((.*?)\)', r'*\1*', response_text)
 
         telegram_response = markdownify(response_text)
         await context.bot.edit_message_text(
@@ -255,8 +252,16 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             parse_mode=ParseMode.MARKDOWN_V2
         )
 
-        if file_path_to_send:
-            await context.bot.send_document(chat_id=chat_id, document=open(file_path_to_send, 'rb'))
+        media_group = []
+        for alt_text, file_path in image_tags:
+            if os.path.isabs(file_path) and os.path.exists(file_path):
+                if any(file_path.lower().endswith(ext) for ext in ['.png', '.jpg', '.jpeg']):
+                    media_group.append(InputMediaPhoto(media=open(file_path, 'rb'), caption=alt_text))
+                else:
+                    await context.bot.send_document(chat_id=chat_id, document=open(file_path, 'rb'), caption=alt_text)
+        
+        if media_group:
+            await context.bot.send_media_group(chat_id=chat_id, media=media_group)
 
     except Exception as e:
         logger.error(f"Error communicating with {agent_alias} agent: {e}")
