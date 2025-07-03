@@ -27,6 +27,9 @@ def get_fast_agent_app(model_name: str):
             "After generating a summary, save it as a Markdown file with the same name as the document, but with a '.md' extension. "
             "For example, if the document is 'My Awesome Document.pdf', the summary file should be 'My Awesome Document.md'. "
             "In the future, when asked about the document's content, you can refer to this Markdown file for a quick summary.\n\n"
+            "When you want to show a file to the user, append the file path to the end of your message, separated by '@@FILE_PATH@@'. "
+            "For example: 'Here is the file you requested.@@FILE_PATH@@/path/to/file.pdf'. "
+            "The file path must be an absolute path. "
             "You can also get weather information, get the current date and time, perform arithmetic calculations, "
             "and manage files. However, your core purpose is to be a document management assistant."
         ),

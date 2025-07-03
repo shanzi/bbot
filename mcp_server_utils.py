@@ -99,6 +99,36 @@ def pdf_to_images(file_path: str, output_directory: str = None) -> str:
         return f"An unexpected error occurred: {e}"
 
 @fast_mcp.tool()
+def trim_pdf_margins(file_path: str, output_file_path: str = None, uniform_order_stat: int = 1) -> str:
+    """
+    Trims the margins of a PDF file using the 'pdfcropmargins' command-line tool.
+    By default, it uses a uniform order statistic of 1.
+    The agent can specify a different `uniform_order_stat` to ignore more or less of the largest margins.
+    If `output_file_path` is not provided, a new file with the suffix '_cropped.pdf' will be created.
+    """
+    try:
+        if not file_path.lower().endswith('.pdf'):
+            return f"Error: The provided file is not a PDF: {file_path}"
+
+        command = ["pdfcropmargins", "-v", "-s", "-m", str(uniform_order_stat), file_path]
+        if output_file_path:
+            command.extend(["-o", output_file_path])
+
+        result = subprocess.run(
+            command,
+            capture_output=True,
+            text=True,
+            check=True
+        )
+        return f"PDF margins successfully trimmed. Output: {result.stdout}"
+    except FileNotFoundError:
+        return "Error: 'pdfcropmargins' command not found. Please ensure it is installed and in your system's PATH."
+    except subprocess.CalledProcessError as e:
+        return f"Error trimming PDF margins with pdfcropmargins: {e.stderr}"
+    except Exception as e:
+        return f"An unexpected error occurred: {e}"
+
+@fast_mcp.tool()
 def save_summary(summary: str, file_path: str) -> str:
     """
     Saves the given summary to a file.

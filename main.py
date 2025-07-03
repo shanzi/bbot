@@ -237,6 +237,16 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         # Get only the last text content (final assistant response)
         response_text = response_multipart.last_text()
 
+        # Check if the response ends with a file path
+        parts = response_text.strip().split('@@FILE_PATH@@')
+        file_path_to_send = None
+
+        if len(parts) == 2:
+            response_text = parts[0].strip()
+            file_path_to_send = parts[1].strip()
+            if not (os.path.isabs(file_path_to_send) and os.path.exists(file_path_to_send)):
+                file_path_to_send = None
+
         telegram_response = markdownify(response_text)
         await context.bot.edit_message_text(
             chat_id=chat_id,
@@ -244,6 +254,9 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             text=telegram_response,
             parse_mode=ParseMode.MARKDOWN_V2
         )
+
+        if file_path_to_send:
+            await context.bot.send_document(chat_id=chat_id, document=open(file_path_to_send, 'rb'))
 
     except Exception as e:
         logger.error(f"Error communicating with {agent_alias} agent: {e}")
