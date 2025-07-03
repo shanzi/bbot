@@ -16,7 +16,9 @@ def download_file(url: str, subdirectory: str, file_name: str) -> str:
     """
     # Sanitize file_name to prevent directory traversal
     try:
-        utils.download_file(url, subdirectory, file_name)
+        save_dir = utils.get_save_directory(subdirectory)
+        save_path = os.path.join(save_dir, file_name)
+        utils.download_file(url, save_path)
         return f"File {file_name} successfully downloaded"
     except Exception as e:
         return f"Failed to download file {url}: {e}"
@@ -67,22 +69,33 @@ def pdf_to_text(file_path: str, truncate_limit_tokens: int = 500) -> str:
 
 
 @fast_mcp.tool()
-def pdf_to_images(file_path: str, output_directory: str = None) -> str:
+def pdf_to_images(file_path: str, pages: str = "1", image_format: str = "jpeg", size: int = 1024) -> str:
     """
-    Converts a PDF file into images (PNG format by default) using the 'pdftocairo' command-line tool.
+    Converts selected pages of a PDF file into images using the 'pdftocairo' command-line tool.
+    By default, it only converts the first page to a 1024px wide PNG image.
+    The agent can specify a different page or range of pages, image format (png, jpeg, tiff, ps, eps, svg), and size.
+    The output directory will be 'data/document/thumbnail'.
     Returns a message indicating the success or failure and the output directory.
     """
     try:
         if not file_path.lower().endswith('.pdf'):
             return f"Error: The provided file is not a PDF: {file_path}"
 
-        if output_directory is None:
-            output_directory = os.path.join(os.path.dirname(file_path), "pdf_images")
-        
+        output_directory = utils.get_save_directory("document", "thumbnail")
         os.makedirs(output_directory, exist_ok=True)
 
-        # pdftocairo -png input.pdf output_prefix
-        command = ["pdftocairo", "-png", file_path, os.path.join(output_directory, os.path.basename(file_path).replace('.pdf', ''))]
+        command = [
+            "pdftocairo", 
+            f"-{image_format}", 
+            "-f", 
+            pages, 
+            "-l", 
+            pages, 
+            "-scale-to",
+            str(size),
+            file_path, 
+            os.path.join(output_directory, os.path.basename(file_path).replace('.pdf', ''))
+        ]
         
         result = subprocess.run(
             command,
@@ -99,20 +112,23 @@ def pdf_to_images(file_path: str, output_directory: str = None) -> str:
         return f"An unexpected error occurred: {e}"
 
 @fast_mcp.tool()
-def trim_pdf_margins(file_path: str, output_file_path: str = None, uniform_order_stat: int = 1) -> str:
+def trim_pdf_margins(file_path: str, uniform_order_stat: int = 1) -> str:
     """
     Trims the margins of a PDF file using the 'pdfcropmargins' command-line tool.
     By default, it uses a uniform order statistic of 1.
     The agent can specify a different `uniform_order_stat` to ignore more or less of the largest margins.
-    If `output_file_path` is not provided, a new file with the suffix '_cropped.pdf' will be created.
+    The output file will be created in the 'data/document/cropped' directory.
     """
     try:
         if not file_path.lower().endswith('.pdf'):
             return f"Error: The provided file is not a PDF: {file_path}"
 
-        command = ["pdfcropmargins", "-v", "-s", "-m", str(uniform_order_stat), file_path]
-        if output_file_path:
-            command.extend(["-o", output_file_path])
+        output_dir = utils.get_save_directory("document", "cropped")
+        os.makedirs(output_dir, exist_ok=True)
+        base_name = os.path.basename(file_path)
+        output_file_path = os.path.join(output_dir, base_name)
+
+        command = ["pdfcropmargins", "-v", "-s", "-m", str(uniform_order_stat), file_path, "-o", output_file_path]
 
         result = subprocess.run(
             command,

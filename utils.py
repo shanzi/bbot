@@ -7,17 +7,13 @@ def get_save_directory(*args) -> str:
     return os.path.join(os.getcwd(), "data", *args)
 
 
-def download_file(url: str, subdir: str, file_name: str):
+def download_file(url: str, save_path: str):
     """
-    Downloads a file from the given URL and saves it to the 'data' folder.
-    The file will be saved in the 'data/document' subdirectory.
+    Downloads a file from the given URL and saves it to the specified path.
     """
     # Sanitize file_name to prevent directory traversal
-    save_directory = get_save_directory(subdir)
+    save_directory = os.path.dirname(save_path)
     os.makedirs(save_directory, exist_ok=True)
-
-    sanitized_file_name = os.path.basename(file_name)
-    save_path = os.path.join(save_directory, sanitized_file_name)
 
     try:
         response = httpx.get(url, follow_redirects=True)
