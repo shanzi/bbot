@@ -241,8 +241,16 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         # Find all image tags in the response
         image_tags = re.findall(r'!\[(.*?)\]\((.*?)\)', response_text)
         
-        # Remove image tags from the response text, replacing them with the alt text in italics
-        response_text = re.sub(r'!\[(.*?)\]\((.*?)\)', r'*\1*', response_text)
+        media_group = []
+        for alt_text, file_path in image_tags:
+            if not os.path.isabs(file_path):
+                if file_path.startswith('data/'):
+                    file_path = os.path.join(os.getcwd(), file_path)
+                else:
+                    file_path = utils.get_save_directory(file_path)
+            
+            if os.path.exists(file_path):
+                media_group.append(InputMediaPhoto(media=open(file_path, 'rb'), caption=alt_text))
 
         telegram_response = markdownify(response_text)
         await context.bot.edit_message_text(
@@ -251,14 +259,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             text=telegram_response,
             parse_mode=ParseMode.MARKDOWN_V2
         )
-
-        media_group = []
-        for alt_text, file_path in image_tags:
-            if os.path.isabs(file_path) and os.path.exists(file_path):
-                if any(file_path.lower().endswith(ext) for ext in ['.png', '.jpg', '.jpeg']):
-                    media_group.append(InputMediaPhoto(media=open(file_path, 'rb'), caption=alt_text))
-                else:
-                    await context.bot.send_document(chat_id=chat_id, document=open(file_path, 'rb'), caption=alt_text)
         
         if media_group:
             await context.bot.send_media_group(chat_id=chat_id, media=media_group)

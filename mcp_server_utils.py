@@ -75,7 +75,7 @@ def pdf_to_images(file_path: str, pages: list[int] = [1], image_format: str = "j
     By default, it only converts the first page to a 1024px wide jpeg image.
     The agent can specify a different page or list of pages, image format (png, jpeg, tiff, ps, eps, svg), and size.
     The output directory will be 'data/document/thumbnail'.
-    Returns a message indicating the success or failure and the output directory.
+    Returns a comma-separated list of the full paths of the generated images.
     """
     try:
         if not file_path.lower().endswith('.pdf'):
@@ -84,7 +84,12 @@ def pdf_to_images(file_path: str, pages: list[int] = [1], image_format: str = "j
         output_directory = utils.get_save_directory("document", "thumbnail")
         os.makedirs(output_directory, exist_ok=True)
 
+        output_paths = []
         for page in pages:
+            output_filename = f"{os.path.basename(file_path).replace('.pdf', '')}_{page}.{image_format}"
+            output_path = os.path.join(output_directory, output_filename)
+            output_paths.append(output_path)
+
             command = [
                 "pdftocairo", 
                 f"-{image_format}", 
@@ -104,7 +109,7 @@ def pdf_to_images(file_path: str, pages: list[int] = [1], image_format: str = "j
                 text=True,
                 check=True
             )
-        return f"PDF successfully converted to images in: {output_directory}."
+        return f"PDF successfully converted to images: {','.join(output_paths)}"
     except FileNotFoundError:
         return "Error: 'pdftocairo' command not found. Please ensure it is installed and in your system's PATH."
     except subprocess.CalledProcessError as e:
