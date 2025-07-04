@@ -45,9 +45,10 @@ agent_instances = {}
 
 # Define supported models
 SUPPORTED_MODELS = {
+    "claude-sonnet-3": "anthropic.claude-3-5-sonnet-20241022",
+    "claude-sonnet-3.7": "anthropic.claude-3-7-sonnet-20250219",
     "openai-mini": "openai.gpt-4o-mini",
     "openai-o3": "openai.o3",
-    "claude-sonnet-3": "anthropic.claude-3-7-sonnet-20250219",
     "claude-sonnet-4": "anthropic.claude-sonnet-4-20250514",
     "gemini-pro": "google.gemini-2.5-pro",
     "gemini-flash": "google.gemini-2.5-flash",
