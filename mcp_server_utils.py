@@ -169,6 +169,30 @@ def get_pdf_info(file_path: str) -> str:
         return f"An unexpected error occurred: {e}"
 
 @fast_mcp.tool()
+def send_email(to_address: str, subject: str, body: str, attachment_path: str = None) -> str:
+    """
+    Sends an email with an optional attachment from a Gmail account.
+    Requires GMAIL_ADDRESS and GMAIL_APP_PASSWORD to be set as environment variables.
+    """
+    try:
+        utils.send_email(to_address, subject, body, attachment_path)
+        return f"Email successfully sent to {to_address}"
+    except Exception as e:
+        return f"Failed to send email to {to_address}: {e}"
+
+@fast_mcp.tool()
+def send_to_kindle(attachment_path: str) -> str:
+    """
+    Sends an email with an attachment to the Kindle email address.
+    Requires GMAIL_ADDRESS, GMAIL_APP_PASSWORD, and KINDLE_ADDRESS to be set as environment variables.
+    """
+    try:
+        utils.send_email_to_kindle(attachment_path)
+        return f"Successfully sent {attachment_path} to Kindle."
+    except Exception as e:
+        return f"Failed to send {attachment_path} to Kindle: {e}"
+
+@fast_mcp.tool()
 def save_summary(summary: str, file_path: str) -> str:
     """
     Saves the given summary to a file.

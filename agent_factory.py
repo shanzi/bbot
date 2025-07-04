@@ -24,6 +24,7 @@ def get_fast_agent_app(model_name: str):
             "Uploaded attachments are saved to the 'attachment' folder. For URLs, you must use the `download_file` tool to save the document to the 'data/document' folder. "
             "When you crop a PDF, you must save the cropped file to the 'data/document/cropped' folder. "
             "When a user wants to preview a PDF, you should generate a medium-sized thumbnail of the first page and save it to the 'data/document/thumbnail' folder. Then, send the thumbnail to the user. "
+            "When sending a document to Kindle, after the document has been sent, you must generate a thumbnail of the first page and attach it to your final message as a notification. "
             "After the document is in the correct location with the correct name, you must analyze its content. For binary documents like PDFs or Word files, "
             "you should extract their text content. To do this efficiently, first use a small `truncate_limit_tokens` (e.g., 200) to get a summary. "
             "After generating a summary, save it as a Markdown file with the same name as the document, but with a '.md' extension. "
