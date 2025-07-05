@@ -241,6 +241,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
         # Find all image tags in the response
         image_tags = re.findall(r'!\[(.*?)\]\((.*?)\)', response_text)
+        logger.info(f"Found {len(image_tags)} image tags in the response.")
         
         media_group = []
         for alt_text, file_path in image_tags:
@@ -251,7 +252,10 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
                     file_path = utils.get_save_directory(file_path)
             
             if os.path.exists(file_path):
+                logger.info(f"Found image at {file_path}")
                 media_group.append(InputMediaPhoto(media=open(file_path, 'rb'), caption=alt_text))
+            else:
+                logger.warning(f"Image not found at {file_path}")
 
         telegram_response = markdownify(response_text)
         await context.bot.edit_message_text(

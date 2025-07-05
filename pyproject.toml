@@ -15,4 +15,5 @@ dependencies = [
     "telegramify-markdown",
     "mcp[cli]",
     "tiktoken",
+    "pandocfilters>=1.5.1",
 ]

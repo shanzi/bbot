@@ -82,6 +82,29 @@ def send_email(to_address: str, subject: str, body: str, attachment_path: str = 
     except Exception as e:
         raise ValueError(f"An unexpected error occurred during email sending: {e}")
 
+import os
+import subprocess
+import tempfile
+
+def webpage_to_pdf(url: str, output_path: str):
+    """
+    Converts a webpage to PDF using wkhtmltopdf.
+    """
+    tmp_output = tempfile.mktemp('temp.pdf')
+    try:
+        subprocess.run(
+            ["wkhtmltopdf", url, tmp_output],
+            check=True
+        )
+    except subprocess.CalledProcessError as e:
+        if not os.path.exists(tmp_output):
+            raise Exception(f"Error converting to PDF with wkhtmltopdf: {e.stderr}")
+    except Exception as e:
+        raise Exception(f"An unexpected error occurred: {e}")
+    finally:
+        if os.path.exists(tmp_output):
+            os.rename(tmp_output, output_path)
+
 def send_email_to_kindle(attachment_path: str):
     """
     Sends an email with an attachment to the Kindle email address.

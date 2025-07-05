@@ -84,10 +84,16 @@ def pdf_to_images(file_path: str, pages: list[int] = [1], image_format: str = "j
         output_directory = utils.get_save_directory("document", "thumbnail")
         os.makedirs(output_directory, exist_ok=True)
 
+        # Determine the correct file extension
+        extension = "jpg" if image_format == "jpeg" else image_format
+
         output_paths = []
         for page in pages:
-            output_filename = f"{os.path.basename(file_path).replace('.pdf', '')}_{page}.{image_format}"
-            output_path = os.path.join(output_directory, output_filename)
+            base_name = os.path.basename(file_path).replace('.pdf', '')
+            output_prefix = os.path.join(output_directory, f"{base_name}_{page}")
+            
+            # The actual output path will have the correct extension
+            output_path = f"{output_prefix}.{extension}"
             output_paths.append(output_path)
 
             command = [
@@ -95,12 +101,11 @@ def pdf_to_images(file_path: str, pages: list[int] = [1], image_format: str = "j
                 f"-{image_format}", 
                 "-f", 
                 str(page), 
-                "-l", 
-                str(page), 
                 "-scale-to",
                 str(size),
+                '-singlefile',
                 file_path, 
-                os.path.join(output_directory, f"{os.path.basename(file_path).replace('.pdf', '')}_{page}")
+                output_prefix
             ]
             
             result = subprocess.run(
@@ -149,6 +154,17 @@ def trim_pdf_margins(file_path: str, uniform_order_stat: int = 1) -> str:
         return f"Error trimming PDF margins with pdfcropmargins: {e.stderr}"
     except Exception as e:
         return f"An unexpected error occurred: {e}"
+
+@fast_mcp.tool()
+def webpage_to_pdf(url: str, output_path: str) -> str:
+    """
+    Converts a webpage to PDF using wkhtmltopdf.
+    """
+    try:
+        utils.webpage_to_pdf(url, output_path)
+        return f"Successfully converted {url} to {output_path}"
+    except Exception as e:
+        return f"Failed to convert {url} to PDF: {e}"
 
 @fast_mcp.tool()
 def get_pdf_info(file_path: str) -> str:
