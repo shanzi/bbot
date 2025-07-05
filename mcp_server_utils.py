@@ -225,6 +225,19 @@ def save_summary(summary: str, file_path: str) -> str:
     except Exception as e:
         return f"Failed to save summary to {file_path}: {e}"
 
+@fast_mcp.tool()
+def empty_trash() -> str:
+    """
+    Permanently deletes all files and directories from the trash folder.
+    """
+    try:
+        utils.empty_trash()
+        return "Trash has been emptied."
+    except Exception as e:
+        return f"Error emptying trash: {e}"
+
+
+
 def main():
     fast_mcp.run()
 

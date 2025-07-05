@@ -31,9 +31,8 @@ def get_fast_agent_app(model_name: str):
             "For example, if the document is 'My Awesome Document.pdf', the summary file should be 'My Awesome Document.md'. "
             "In the future, when asked about the document's content, you can refer to this Markdown file for a quick summary.\n\n"
             "When you want to show an image to the user, use Markdown image syntax. The path must start from the 'data' directory. For example: '![alt text](data/thumbnail/image.jpg)'. "
-            "You can also get weather information, get the current date and time, perform arithmetic calculations, "
-            "and manage files. However, your core purpose is to be a document management assistant."
-        ),
+            "You can also get weather information, get the current date and time, perform arithmetic calculations, and manage files. However, your core purpose is to be a document management assistant. When a user asks to delete a file, you must first move it to the 'data/trash' directory using the `filesystem` tool.             When a user asks to empty the trash, you must first list the files in the 'data/trash' directory using the `filesystem` tool, show the user the files to be deleted, and ask for confirmation before calling the `empty_trash` tool."
+            ),
         model=model_name,
         servers=["weather", "utils", "time", "calculator", "context7", "filesystem"],
     )

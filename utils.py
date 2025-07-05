@@ -156,11 +156,35 @@ def save_summary(summary: str, file_path: str):
         raise ValueError(f"An unexpected error occurred during summary saving: {e}")
 
 
+import shutil
 import tiktoken
 
 # Get the encoding for a default model.
 # cl100k_base is the encoding used by gpt-4, gpt-3.5-turbo, and text-embedding-ada-002.
 encoding = tiktoken.get_encoding("cl100k_base")
+
+def get_trash_directory() -> str:
+    """Returns the absolute path to the trash directory."""
+    return os.path.join(os.getcwd(), "data", "trash")
+
+def empty_trash():
+    """
+    Permanently deletes all files and subdirectories in the trash directory.
+    """
+    trash_dir = get_trash_directory()
+    if not os.path.exists(trash_dir):
+        return
+
+    for filename in os.listdir(trash_dir):
+        file_path = os.path.join(trash_dir, filename)
+        try:
+            if os.path.isfile(file_path) or os.path.islink(file_path):
+                os.unlink(file_path)
+            elif os.path.isdir(file_path):
+                shutil.rmtree(file_path)
+        except Exception as e:
+            raise ValueError(f"Failed to delete {file_path}. Reason: {e}")
+
 
 def estimate_tokens(message_history: list) -> int:
     """
