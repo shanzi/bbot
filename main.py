@@ -1,49 +1,53 @@
+"""Telegram bot with FastAgent AI integration for document management."""
+
 import asyncio
+import datetime
 import logging
 import os
 import re
-import datetime
-import zoneinfo
 import time
-import utils
+import zoneinfo
 
-from telegram import Update, ForceReply, ReplyKeyboardMarkup, ReplyKeyboardRemove, BotCommand, InlineKeyboardButton, InlineKeyboardMarkup, InputMediaPhoto
-from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes, CallbackQueryHandler
-from telegram.constants import ParseMode, ChatAction
-from telegramify_markdown import markdownify
 from dotenv import load_dotenv
+from telegram import (
+    BotCommand,
+    InlineKeyboardButton,
+    InlineKeyboardMarkup,
+    InputMediaPhoto,
+    Update,
+)
+from telegram.constants import ParseMode
+from telegram.ext import (
+    Application,
+    CallbackQueryHandler,
+    CommandHandler,
+    ContextTypes,
+    MessageHandler,
+    filters,
+)
+from telegramify_markdown import markdownify
 
-from mcp_agent.core.fastagent import FastAgent
-from agent_factory import get_fast_agent_app, reset_agent_context
+from agent_factory import get_fast_agent_app
+import utils
 
 # Load environment variables from .env file
 load_dotenv()
 
-# Get Telegram bot token from environment variables
-TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
-
-if not TELEGRAM_BOT_TOKEN:
-    raise ValueError("TELEGRAM_BOT_TOKEN not found in .env file or environment variables.")
-
-# Enable logging
+# Configure logging
 logging.basicConfig(
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    level=logging.INFO
 )
-# set higher logging level for httpx to avoid all GET and POST requests being logged
+# Set higher logging level for httpx to avoid all GET and POST requests being logged
 logging.getLogger("httpx").setLevel(logging.WARNING)
 
 logger = logging.getLogger(__name__)
 
-# Agent instances (will be initialized later)
+# Constants
+TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
+if not TELEGRAM_BOT_TOKEN:
+    raise ValueError("TELEGRAM_BOT_TOKEN not found in .env file or environment variables.")
 
-
-# Dictionary to store the current agent for each chat
-current_agents = {}
-
-# Dictionary to store initialized agent instances
-agent_instances = {}
-
-# Define supported models
 SUPPORTED_MODELS = {
     "claude-sonnet-3": "anthropic.claude-3-5-sonnet-20241022",
     "claude-sonnet-3.7": "anthropic.claude-3-7-sonnet-20250219",
@@ -54,11 +58,15 @@ SUPPORTED_MODELS = {
     "gemini-flash": "google.gemini-2.5-flash",
 }
 
+# Global state dictionaries
+current_agents = {}  # Dictionary to store the current agent for each chat
+agent_instances = {}  # Dictionary to store initialized agent instances
+
 # Get the local timezone dynamically
 try:
-    local_timezone = datetime.datetime.now().astimezone().tzinfo
+    LOCAL_TIMEZONE = datetime.datetime.now().astimezone().tzinfo
 except Exception:
-    local_timezone = "UTC" # Fallback if timezone detection fails
+    LOCAL_TIMEZONE = "UTC"  # Fallback if timezone detection fails
 
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Send a message when the command /start is issued, and ask for model selection."""
@@ -70,7 +78,8 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 
     aliases = list(SUPPORTED_MODELS.keys())
     keyboard = [
-        [InlineKeyboardButton(alias.capitalize(), callback_data=alias) for alias in aliases[i:i + 2]]
+        [InlineKeyboardButton(alias.capitalize(), callback_data=alias) 
+         for alias in aliases[i:i + 2]]
         for i in range(0, len(aliases), 2)
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
@@ -83,18 +92,16 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Send a message when the command /help is issued."""
     help_text = (
-        """Here are the commands you can use:
-
-/start - Start a new conversation or reset the bot.
-/status - Show current bot's status.
-/help - Show this help message.
-
-To talk to the agent, just send a message directly."""
+        "Here are the commands you can use:\n\n"
+        "/start - Start a new conversation or reset the bot.\n"
+        "/status - Show current bot's status.\n"
+        "/help - Show this help message.\n\n"
+        "To talk to the agent, just send a message directly."
     )
     await update.message.reply_text(help_text)
 
 async def status_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Shows the currently active agent for the chat."""
+    """Show the currently active agent for the chat."""
     chat_id = update.effective_chat.id
     agent_alias = current_agents.get(chat_id, "claude-sonnet-3")
     agent_instance = agent_instances.get(chat_id)
@@ -118,157 +125,206 @@ async def status_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
 
 async def trim_context_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Trims the agent's context to a specific number of messages."""
+    """Trim the agent's context to a specific number of messages."""
     chat_id = update.effective_chat.id
     agent_instance = agent_instances.get(chat_id)
 
     if not agent_instance:
-        await update.message.reply_text("Agent not initialized. Please start a conversation first.")
+        await update.message.reply_text(
+            "Agent not initialized. Please start a conversation first."
+        )
         return
 
     try:
         keep_count = int(context.args[0])
     except (IndexError, ValueError):
-        await update.message.reply_text("Please provide the number of recent messages to keep.\nUsage: /trim_context <number>")
+        await update.message.reply_text(
+            "Please provide the number of recent messages to keep.\n"
+            "Usage: /trim_context <number>"
+        )
         return
 
     actual_agent = next(iter(agent_instance._agents.values()))
     original_length = len(actual_agent.message_history)
 
     if keep_count >= original_length:
-        await update.message.reply_text(f"Context length is already {original_length}. No trimming needed.")
+        await update.message.reply_text(
+            f"Context length is already {original_length}. No trimming needed."
+        )
         return
 
     if keep_count < 0:
-        await update.message.reply_text("Number of messages to keep cannot be negative.")
+        await update.message.reply_text(
+            "Number of messages to keep cannot be negative."
+        )
         return
-        
+
     actual_agent.message_history = actual_agent.message_history[-keep_count:]
     new_length = len(actual_agent.message_history)
 
-    await update.message.reply_text(f"Context trimmed from {original_length} to {new_length} messages.")
+    await update.message.reply_text(
+        f"Context trimmed from {original_length} to {new_length} messages."
+    )
 
 
+# Helper functions for handle_message
+async def _handle_document_upload(update, context, chat_id, message_id):
+    """Handle document upload and return attachment info."""
+    await context.bot.edit_message_text(
+        chat_id=chat_id,
+        message_id=message_id,
+        text="Downloading attachment..."
+    )
+    doc = update.message.document
+    file = await context.bot.get_file(doc.file_id)
+    target_dir = utils.get_save_directory("attachment")
+    os.makedirs(target_dir, exist_ok=True)
+    target = os.path.join(target_dir, f"{int(time.time()*1000)}--{doc.file_name}")
+    await file.download_to_drive(target)
+    return f"(attachment downloaded to {target})"
 
+
+async def _handle_photo_upload(update, context, chat_id, message_id):
+    """Handle photo upload and return image info."""
+    await context.bot.edit_message_text(
+        chat_id=chat_id,
+        message_id=message_id,
+        text="Downloading image..."
+    )
+    # Get the largest photo
+    photo = update.message.photo[-1]
+    file = await context.bot.get_file(photo.file_id)
+    target_dir = utils.get_save_directory("pictures")
+    os.makedirs(target_dir, exist_ok=True)
+    file_extension = file.file_path.split('.')[-1] if file.file_path else 'jpg'
+    target = os.path.join(target_dir, f"{int(time.time()*1000)}.{file_extension}")
+    await file.download_to_drive(target)
+    return f"(image downloaded to {target})"
+
+
+async def _get_or_create_agent(chat_id, context, message_id):
+    """Get existing agent or create new one if needed."""
+    agent_alias = current_agents.get(chat_id, "claude-sonnet-3")
+    agent_to_use = agent_instances.get(chat_id)
+
+    if not agent_to_use:
+        model_name = SUPPORTED_MODELS.get(agent_alias)
+        if model_name:
+            await context.bot.edit_message_text(
+                chat_id=chat_id,
+                message_id=message_id,
+                text=f"Loading {agent_alias.capitalize()} agent..."
+            )
+            fast_app = get_fast_agent_app(model_name)
+            # IMPORTANT: Use 'async with' to ensure proper FastAgent lifecycle management.
+            # Do not revert to 'await fast_app.run()' as it can lead to resource leaks.
+            async with fast_app.run() as agent:
+                agent_instances[chat_id] = agent
+                agent_to_use = agent_instances[chat_id]
+        else:
+            await context.bot.edit_message_text(
+                chat_id=chat_id,
+                message_id=message_id,
+                text="Invalid agent selected. Please use /start to select an agent."
+            )
+            return None
+    return agent_to_use
+
+
+async def _process_agent_response(agent_to_use, user_message, context, chat_id, message_id):
+    """Process message with agent and send response."""
+    await context.bot.edit_message_text(
+        chat_id=chat_id,
+        message_id=message_id,
+        text="Thinking..."
+    )
+    
+    # Get the actual BaseAgent instance from the AgentApp
+    # Since we only have one agent per FastAgent instance, we can get the first one
+    actual_agent = next(iter(agent_to_use._agents.values()))
+    
+    # Log the estimated token count
+    estimated_tokens = utils.estimate_tokens(actual_agent.message_history)
+    logger.info(f"Calling agent with ~{estimated_tokens} tokens.")
+
+    # Generate the response as a PromptMessageMultipart object
+    response_multipart = await actual_agent.generate(
+        [actual_agent._normalize_message_input(user_message)], None
+    )
+
+    # Get only the last text content (final assistant response)
+    response_text = response_multipart.last_text()
+
+    # Find all image tags in the response
+    image_tags = re.findall(r'!\[(.*?)\]\((.*?)\)', response_text)
+    logger.info(f"Found {len(image_tags)} image tags in the response.")
+    
+    media_group = []
+    for alt_text, file_path in image_tags:
+        if not os.path.isabs(file_path):
+            if file_path.startswith('data/'):
+                file_path = os.path.join(os.getcwd(), file_path)
+            else:
+                file_path = utils.get_save_directory(file_path)
+        
+        if os.path.exists(file_path):
+            logger.info(f"Found image at {file_path}")
+            media_group.append(
+                InputMediaPhoto(media=open(file_path, 'rb'), caption=alt_text)
+            )
+        else:
+            logger.warning(f"Image not found at {file_path}")
+
+    telegram_response = markdownify(response_text)
+    await context.bot.edit_message_text(
+        chat_id=chat_id,
+        message_id=message_id,
+        text=telegram_response,
+        parse_mode=ParseMode.MARKDOWN_V2
+    )
+    
+    if media_group:
+        await context.bot.send_media_group(chat_id=chat_id, media=media_group)
 
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Handle incoming text messages."""
+    """Handle incoming text messages, documents, and photos."""
     chat_id = update.effective_chat.id
 
     # Send an initial placeholder message immediately
-    placeholder_message = await update.message.reply_text("Initializing...", reply_to_message_id=update.message.message_id)
+    placeholder_message = await update.message.reply_text(
+        "Initializing...", reply_to_message_id=update.message.message_id
+    )
 
     try:
         # Handle text messages
         user_message = update.message.text or ""
         
+        # Handle document attachments
         if update.message.document:
-            await context.bot.edit_message_text(
-                chat_id=chat_id,
-                message_id=placeholder_message.message_id,
-                text="Downloading attachment..."
+            user_message += await _handle_document_upload(
+                update, context, chat_id, placeholder_message.message_id
             )
-            doc = update.message.document
-            file = await context.bot.get_file(doc.file_id)
-            target_dir = utils.get_save_directory("attachment")
-            os.makedirs(target_dir, exist_ok=True)
-            target = os.path.join(target_dir, f"{int(time.time()*1000)}--{doc.file_name}")
-            await file.download_to_drive(target)
-
-            user_message += f"(attachment downloaded to {target})"
+        # Handle photo attachments
         elif update.message.photo:
-            await context.bot.edit_message_text(
-                chat_id=chat_id,
-                message_id=placeholder_message.message_id,
-                text="Downloading image..."
+            user_message += await _handle_photo_upload(
+                update, context, chat_id, placeholder_message.message_id
             )
-            # Get the largest photo
-            photo = update.message.photo[-1]
-            file = await context.bot.get_file(photo.file_id)
-            target_dir = utils.get_save_directory("pictures")
-            os.makedirs(target_dir, exist_ok=True)
-            file_extension = file.file_path.split('.')[-1] if file.file_path else 'jpg'
-            target = os.path.join(target_dir, f"{int(time.time()*1000)}.{file_extension}")
-            await file.download_to_drive(target)
 
-            user_message += f"(image downloaded to {target})"
-
-        agent_alias = current_agents.get(chat_id, "claude-sonnet-3")
-        agent_to_use = agent_instances.get(chat_id)
-
+        # Get or initialize agent
+        agent_to_use = await _get_or_create_agent(
+            chat_id, context, placeholder_message.message_id
+        )
         if not agent_to_use:
-            model_name = SUPPORTED_MODELS.get(agent_alias)
-            if model_name:
-                await context.bot.edit_message_text(
-                    chat_id=chat_id,
-                    message_id=placeholder_message.message_id,
-                    text=f"Loading {agent_alias.capitalize()} agent..."
-                )
-                fast_app = get_fast_agent_app(model_name)
-                # IMPORTANT: Use 'async with' to ensure proper FastAgent lifecycle management.
-                # Do not revert to 'await fast_app.run()' as it can lead to resource leaks.
-                async with fast_app.run() as agent:
-                    agent_instances[chat_id] = agent
-                    agent_to_use = agent_instances[chat_id]
-            else:
-                await context.bot.edit_message_text(
-                    chat_id=chat_id,
-                    message_id=placeholder_message.message_id,
-                    text="Invalid agent selected. Please use /start to select an agent."
-                )
-                return
+            return
 
-        # Now that agent_to_use is guaranteed to be set (or we returned), proceed with thinking
-        await context.bot.edit_message_text(
-            chat_id=chat_id,
-            message_id=placeholder_message.message_id,
-            text="Thinking..."
+        # Process message with agent
+        await _process_agent_response(
+            agent_to_use, user_message, context, chat_id, placeholder_message.message_id
         )
-        # Get the actual BaseAgent instance from the AgentApp
-        # Since we only have one agent per FastAgent instance, we can get the first one
-        actual_agent = next(iter(agent_to_use._agents.values()))
-        
-        # Log the estimated token count
-        estimated_tokens = utils.estimate_tokens(actual_agent.message_history)
-        logger.info(f"Calling agent with ~{estimated_tokens} tokens.")
-
-        # Generate the response as a PromptMessageMultipart object
-        response_multipart = await actual_agent.generate([actual_agent._normalize_message_input(user_message)], None)
-
-        # Get only the last text content (final assistant response)
-        response_text = response_multipart.last_text()
-
-        # Find all image tags in the response
-        image_tags = re.findall(r'!\[(.*?)\]\((.*?)\)', response_text)
-        logger.info(f"Found {len(image_tags)} image tags in the response.")
-        
-        media_group = []
-        for alt_text, file_path in image_tags:
-            if not os.path.isabs(file_path):
-                if file_path.startswith('data/'):
-                    file_path = os.path.join(os.getcwd(), file_path)
-                else:
-                    file_path = utils.get_save_directory(file_path)
-            
-            if os.path.exists(file_path):
-                logger.info(f"Found image at {file_path}")
-                media_group.append(InputMediaPhoto(media=open(file_path, 'rb'), caption=alt_text))
-            else:
-                logger.warning(f"Image not found at {file_path}")
-
-        telegram_response = markdownify(response_text)
-        await context.bot.edit_message_text(
-            chat_id=chat_id,
-            message_id=placeholder_message.message_id,
-            text=telegram_response,
-            parse_mode=ParseMode.MARKDOWN_V2
-        )
-        
-        if media_group:
-            await context.bot.send_media_group(chat_id=chat_id, media=media_group)
 
     except Exception as e:
+        agent_alias = current_agents.get(chat_id, "claude-sonnet-3")
         logger.error(f"Error communicating with {agent_alias} agent: {e}")
         error_message = f"Sorry, I encountered an error with the {agent_alias} agent: {e}"
         await context.bot.edit_message_text(
@@ -276,15 +332,9 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             message_id=placeholder_message.message_id,
             text=error_message
         )
-    # Removed the redundant else block here, as the error handling or return statements
-    # already cover all cases where agent_to_use might not be initialized.
-    # The previous 'else' block was unreachable due to the 'return' statement above.
-
-            # Removed the redundant else block here, as the error handling or return statements
-    # already cover all cases where agent_to_use might not be initialized.
-    # The previous 'else' block was unreachable due to the 'return' statement above.
 
 async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Handle button callback queries for model selection."""
     query = update.callback_query
     await query.answer()
 
@@ -295,7 +345,10 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         current_agents[chat_id] = selected_alias
         # Reset agent context when switching models
         agent_instances.pop(chat_id, None)
-        await query.edit_message_text(text=f"Switched to {selected_alias.capitalize()} agent (model: {SUPPORTED_MODELS[selected_alias]}).")
+        model_name = SUPPORTED_MODELS[selected_alias]
+        await query.edit_message_text(
+            text=f"Switched to {selected_alias.capitalize()} agent (model: {model_name})."
+        )
     else:
         await query.edit_message_text(text="Invalid model selection.")
 
@@ -315,6 +368,7 @@ async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> N
             )
 
 async def post_init(app):
+    """Initialize bot commands after startup."""
     await app.bot.set_my_commands([
         BotCommand("start", "Start a new conversation or reset the bot."),
         BotCommand("status", "Show current bot's status."),
@@ -325,12 +379,17 @@ async def post_init(app):
 def main() -> None:
     """Start the bot."""
     # Create the Application and pass it your bot's token.
-    application = Application.builder().token(TELEGRAM_BOT_TOKEN).post_init(post_init).build()
+    application = (
+        Application.builder()
+        .token(TELEGRAM_BOT_TOKEN)
+        .post_init(post_init)
+        .build()
+    )
 
     # Register the error handler
     application.add_error_handler(error_handler)
 
-    # on different commands - answer in Telegram
+    # Register command handlers
     application.add_handler(CommandHandler("start", start_command))
     application.add_handler(CommandHandler("status", status_command))
     application.add_handler(CommandHandler("help", help_command))
@@ -339,8 +398,13 @@ def main() -> None:
     # Handle button presses
     application.add_handler(CallbackQueryHandler(button_callback))
 
-    # on non command messages - echo the message on Telegram
-    application.add_handler(MessageHandler((filters.TEXT & ~filters.COMMAND) | filters.ATTACHMENT, handle_message))
+    # Handle non-command messages and attachments
+    application.add_handler(
+        MessageHandler(
+            (filters.TEXT & ~filters.COMMAND) | filters.ATTACHMENT, 
+            handle_message
+        )
+    )
 
     # Run the bot until the user presses Ctrl-C
     application.run_polling(allowed_updates=Update.ALL_TYPES)

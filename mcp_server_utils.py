@@ -1,20 +1,30 @@
-import os
-import utils
-import tempfile
-import subprocess
-from mcp.server.fastmcp.server import FastMCP
-import tiktoken
+"""MCP server providing utility tools for PDF processing, file management, and email."""
 
+import os
+import subprocess
+import tempfile
+
+import tiktoken
+from mcp.server.fastmcp.server import FastMCP
+
+import utils
+
+# Initialize MCP server and tiktoken encoding
 fast_mcp = FastMCP("mcp-server-utils")
+encoding = tiktoken.get_encoding("cl100k_base")
 
 @fast_mcp.tool()
 def download_file(url: str, subdirectory: str, file_name: str) -> str:
+    """Download a file from the given URL and save it to the 'data' folder.
+    
+    Args:
+        url: The URL to download from
+        subdirectory: Subdirectory under 'data' to save the file
+        file_name: Name for the saved file
+        
+    Returns:
+        str: Success or error message
     """
-    Downloads a file from the given URL and saves it to the 'data' folder.
-    The file must be saved in one subdirectory under 'data'.
-    The assistant should decide which subdirectory to put per filetype.
-    """
-    # Sanitize file_name to prevent directory traversal
     try:
         save_dir = utils.get_save_directory(subdirectory)
         save_path = os.path.join(save_dir, file_name)
@@ -23,19 +33,16 @@ def download_file(url: str, subdirectory: str, file_name: str) -> str:
     except Exception as e:
         return f"Failed to download file {url}: {e}"
 
-import tiktoken
-
-# Get the encoding for a default model.
-# cl100k_base is the encoding used by gpt-4, gpt-3.5-turbo, and text-embedding-ada-002.
-encoding = tiktoken.get_encoding("cl100k_base")
-
 @fast_mcp.tool()
 def pdf_to_text(file_path: str, truncate_limit_tokens: int = 500) -> str:
-    """
-    Converts a PDF file to plain text using the 'pdftotext' command-line tool.
-    By default, the returned text is truncated to 500 tokens.
-    The agent can specify a different `truncate_limit_tokens` to get more or less text.
-    Set `truncate_limit_tokens` to 0 to get the full text.
+    """Convert a PDF file to plain text using the 'pdftotext' command-line tool.
+    
+    Args:
+        file_path: Path to the PDF file
+        truncate_limit_tokens: Maximum tokens to return (0 for full text)
+        
+    Returns:
+        str: Extracted text or error message
     """
     try:
         # Ensure the file exists and is a PDF
@@ -44,7 +51,7 @@ def pdf_to_text(file_path: str, truncate_limit_tokens: int = 500) -> str:
         
         # Run pdftotext command
         result = subprocess.run(
-            ["pdftotext", file_path, "-"], # "-" tells pdftotext to output to stdout
+            ["pdftotext", file_path, "-"],  # "-" tells pdftotext to output to stdout
             capture_output=True,
             text=True,
             check=True
@@ -61,7 +68,10 @@ def pdf_to_text(file_path: str, truncate_limit_tokens: int = 500) -> str:
         return full_text
         
     except FileNotFoundError:
-        return "Error: 'pdftotext' command not found. Please ensure it is installed and in your system's PATH."
+        return (
+            "Error: 'pdftotext' command not found. "
+            "Please ensure it is installed and in your system's PATH."
+        )
     except subprocess.CalledProcessError as e:
         return f"Error converting PDF with pdftotext: {e.stderr}"
     except Exception as e:
@@ -69,14 +79,26 @@ def pdf_to_text(file_path: str, truncate_limit_tokens: int = 500) -> str:
 
 
 @fast_mcp.tool()
-def pdf_to_images(file_path: str, pages: list[int] = [1], image_format: str = "jpeg", size: int = 1024) -> str:
+def pdf_to_images(
+    file_path: str, 
+    pages: list[int] = None, 
+    image_format: str = "jpeg", 
+    size: int = 1024
+) -> str:
+    """Convert selected pages of a PDF file into images using 'pdftocairo'.
+    
+    Args:
+        file_path: Path to the PDF file
+        pages: List of page numbers to convert (defaults to [1])
+        image_format: Output format (png, jpeg, tiff, ps, eps, svg)
+        size: Width of output images in pixels
+        
+    Returns:
+        str: Success message with paths or error message
     """
-    Converts selected pages of a PDF file into images using the 'pdftocairo' command-line tool.
-    By default, it only converts the first page to a 1024px wide jpeg image.
-    The agent can specify a different page or list of pages, image format (png, jpeg, tiff, ps, eps, svg), and size.
-    The output directory will be 'data/document/thumbnail'.
-    Returns a comma-separated list of the full paths of the generated images.
-    """
+    if pages is None:
+        pages = [1]
+        
     try:
         if not file_path.lower().endswith('.pdf'):
             return f"Error: The provided file is not a PDF: {file_path}"
@@ -108,7 +130,7 @@ def pdf_to_images(file_path: str, pages: list[int] = [1], image_format: str = "j
                 output_prefix
             ]
             
-            result = subprocess.run(
+            subprocess.run(
                 command,
                 capture_output=True,
                 text=True,
@@ -116,7 +138,10 @@ def pdf_to_images(file_path: str, pages: list[int] = [1], image_format: str = "j
             )
         return f"PDF successfully converted to images: {','.join(output_paths)}"
     except FileNotFoundError:
-        return "Error: 'pdftocairo' command not found. Please ensure it is installed and in your system's PATH."
+        return (
+            "Error: 'pdftocairo' command not found. "
+            "Please ensure it is installed and in your system's PATH."
+        )
     except subprocess.CalledProcessError as e:
         return f"Error converting PDF to images with pdftocairo: {e.stderr}"
     except Exception as e:
@@ -124,11 +149,14 @@ def pdf_to_images(file_path: str, pages: list[int] = [1], image_format: str = "j
 
 @fast_mcp.tool()
 def trim_pdf_margins(file_path: str, uniform_order_stat: int = 1) -> str:
-    """
-    Trims the margins of a PDF file using the 'pdfcropmargins' command-line tool.
-    By default, it uses a uniform order statistic of 1.
-    The agent can specify a different `uniform_order_stat` to ignore more or less of the largest margins.
-    The output file will be created in the 'data/document/cropped' directory.
+    """Trim the margins of a PDF file using the 'pdfcropmargins' command-line tool.
+    
+    Args:
+        file_path: Path to the PDF file
+        uniform_order_stat: Order statistic for margin detection (higher = more aggressive)
+        
+    Returns:
+        str: Success message or error message
     """
     try:
         if not file_path.lower().endswith('.pdf'):
@@ -139,7 +167,10 @@ def trim_pdf_margins(file_path: str, uniform_order_stat: int = 1) -> str:
         base_name = os.path.basename(file_path)
         output_file_path = os.path.join(output_dir, base_name)
 
-        command = ["pdfcropmargins", "-v", "-s", "-m", str(uniform_order_stat), file_path, "-o", output_file_path]
+        command = [
+            "pdfcropmargins", "-v", "-s", "-m", 
+            str(uniform_order_stat), file_path, "-o", output_file_path
+        ]
 
         result = subprocess.run(
             command,
@@ -149,7 +180,10 @@ def trim_pdf_margins(file_path: str, uniform_order_stat: int = 1) -> str:
         )
         return f"PDF margins successfully trimmed. Output: {result.stdout}"
     except FileNotFoundError:
-        return "Error: 'pdfcropmargins' command not found. Please ensure it is installed and in your system's PATH."
+        return (
+            "Error: 'pdfcropmargins' command not found. "
+            "Please ensure it is installed and in your system's PATH."
+        )
     except subprocess.CalledProcessError as e:
         return f"Error trimming PDF margins with pdfcropmargins: {e.stderr}"
     except Exception as e:
@@ -157,8 +191,14 @@ def trim_pdf_margins(file_path: str, uniform_order_stat: int = 1) -> str:
 
 @fast_mcp.tool()
 def webpage_to_pdf(url: str, output_path: str) -> str:
-    """
-    Converts a webpage to PDF using wkhtmltopdf.
+    """Convert a webpage to PDF using wkhtmltopdf.
+    
+    Args:
+        url: The URL of the webpage to convert
+        output_path: Path where the PDF should be saved
+        
+    Returns:
+        str: Success or error message
     """
     try:
         utils.webpage_to_pdf(url, output_path)
@@ -168,8 +208,13 @@ def webpage_to_pdf(url: str, output_path: str) -> str:
 
 @fast_mcp.tool()
 def get_pdf_info(file_path: str) -> str:
-    """
-    Returns information about a PDF file using the 'pdfinfo' command-line tool.
+    """Get information about a PDF file using the 'pdfinfo' command-line tool.
+    
+    Args:
+        file_path: Path to the PDF file
+        
+    Returns:
+        str: PDF information or error message
     """
     try:
         if not file_path.lower().endswith('.pdf'):
@@ -183,17 +228,32 @@ def get_pdf_info(file_path: str) -> str:
         )
         return result.stdout
     except FileNotFoundError:
-        return "Error: 'pdfinfo' command not found. Please ensure it is installed and in your system's PATH."
+        return (
+            "Error: 'pdfinfo' command not found. "
+            "Please ensure it is installed and in your system's PATH."
+        )
     except subprocess.CalledProcessError as e:
         return f"Error getting PDF info with pdfinfo: {e.stderr}"
     except Exception as e:
         return f"An unexpected error occurred: {e}"
 
 @fast_mcp.tool()
-def send_email(to_address: str, subject: str, body: str, attachment_path: str = None) -> str:
-    """
-    Sends an email with an optional attachment from a Gmail account.
-    Requires GMAIL_ADDRESS and GMAIL_APP_PASSWORD to be set as environment variables.
+def send_email(
+    to_address: str, 
+    subject: str, 
+    body: str, 
+    attachment_path: str = None
+) -> str:
+    """Send an email with an optional attachment from a Gmail account.
+    
+    Args:
+        to_address: Recipient email address
+        subject: Email subject
+        body: Email body text
+        attachment_path: Optional path to file to attach
+        
+    Returns:
+        str: Success or error message
     """
     try:
         utils.send_email(to_address, subject, body, attachment_path)
@@ -203,9 +263,13 @@ def send_email(to_address: str, subject: str, body: str, attachment_path: str = 
 
 @fast_mcp.tool()
 def send_to_kindle(attachment_path: str) -> str:
-    """
-    Sends an email with an attachment to the Kindle email address.
-    Requires GMAIL_ADDRESS, GMAIL_APP_PASSWORD, and KINDLE_ADDRESS to be set as environment variables.
+    """Send an email with an attachment to the Kindle email address.
+    
+    Args:
+        attachment_path: Path to the file to send to Kindle
+        
+    Returns:
+        str: Success or error message
     """
     try:
         utils.send_email_to_kindle(attachment_path)
@@ -215,9 +279,14 @@ def send_to_kindle(attachment_path: str) -> str:
 
 @fast_mcp.tool()
 def save_summary(summary: str, file_path: str) -> str:
-    """
-    Saves the given summary to a file.
-    The file will be saved in the same directory as the original document.
+    """Save the given summary to a file.
+    
+    Args:
+        summary: The summary text to save
+        file_path: Path where the summary should be saved
+        
+    Returns:
+        str: Success or error message
     """
     try:
         utils.save_summary(summary, file_path)
@@ -227,8 +296,10 @@ def save_summary(summary: str, file_path: str) -> str:
 
 @fast_mcp.tool()
 def empty_trash() -> str:
-    """
-    Permanently deletes all files and directories from the trash folder.
+    """Permanently delete all files and directories from the trash folder.
+    
+    Returns:
+        str: Success or error message
     """
     try:
         utils.empty_trash()
@@ -237,9 +308,10 @@ def empty_trash() -> str:
         return f"Error emptying trash: {e}"
 
 
-
-def main():
+def main() -> None:
+    """Run the MCP server."""
     fast_mcp.run()
+
 
 if __name__ == "__main__":
     main()

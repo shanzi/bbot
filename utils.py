@@ -1,15 +1,48 @@
-import asyncio
-import httpx
+"""Utility functions for file operations, email, and document processing."""
+
 import os
+import shutil
+import smtplib
+import subprocess
+import tempfile
+from email import encoders
+from email.mime.base import MIMEBase
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
+
+import httpx
+import tiktoken
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
+
+# Initialize tiktoken encoding for token estimation
+# cl100k_base is the encoding used by gpt-4, gpt-3.5-turbo, and text-embedding-ada-002
+ENCODING = tiktoken.get_encoding("cl100k_base")
 
 
 def get_save_directory(*args) -> str:
+    """Get the absolute path to a subdirectory within the data folder.
+    
+    Args:
+        *args: Path components to join with the data directory
+        
+    Returns:
+        str: Absolute path to the requested directory
+    """
     return os.path.join(os.getcwd(), "data", *args)
 
 
-def download_file(url: str, save_path: str):
-    """
-    Downloads a file from the given URL and saves it to the specified path.
+def download_file(url: str, save_path: str) -> None:
+    """Download a file from the given URL and save it to the specified path.
+    
+    Args:
+        url: The URL to download from
+        save_path: The local path where the file should be saved
+        
+    Raises:
+        ValueError: If there's an error during download
     """
     # Sanitize file_name to prevent directory traversal
     save_directory = os.path.dirname(save_path)
@@ -22,33 +55,35 @@ def download_file(url: str, save_path: str):
         with open(save_path, "wb") as f:
             f.write(response.content)
     except httpx.RequestError as e:
-        raise ValueError(f"Error making HTTP request: {e}")
+        raise ValueError(f"Error making HTTP request: {e}") from e
     except httpx.HTTPStatusError as e:
-        raise ValueError(f"HTTP error during download: {e.response.status_code} - {e.response.text}")
+        raise ValueError(
+            f"HTTP error during download: {e.response.status_code} - {e.response.text}"
+        ) from e
     except Exception as e:
-        raise ValueError(f"An unexpected error occurred during download: {e}")
+        raise ValueError(f"An unexpected error occurred during download: {e}") from e
 
 
-import smtplib
-from email.mime.multipart import MIMEMultipart
-from email.mime.text import MIMEText
-from email.mime.base import MIMEBase
-from email import encoders
-
-from dotenv import load_dotenv
-
-load_dotenv()
-
-def send_email(to_address: str, subject: str, body: str, attachment_path: str = None):
-    """
-    Sends an email with an optional attachment from a Gmail account.
-    Requires GMAIL_ADDRESS and GMAIL_APP_PASSWORD to be set as environment variables.
+def send_email(to_address: str, subject: str, body: str, attachment_path: str = None) -> None:
+    """Send an email with an optional attachment from a Gmail account.
+    
+    Args:
+        to_address: Recipient email address
+        subject: Email subject line
+        body: Email body text
+        attachment_path: Optional path to file to attach
+        
+    Raises:
+        ValueError: If environment variables are missing or email sending fails
+        FileNotFoundError: If attachment file doesn't exist
     """
     gmail_address = os.getenv("GMAIL_ADDRESS")
     gmail_app_password = os.getenv("GMAIL_APP_PASSWORD")
 
     if not gmail_address or not gmail_app_password:
-        raise ValueError("GMAIL_ADDRESS and GMAIL_APP_PASSWORD environment variables must be set.")
+        raise ValueError(
+            "GMAIL_ADDRESS and GMAIL_APP_PASSWORD environment variables must be set."
+        )
 
     msg = MIMEMultipart()
     msg['From'] = gmail_address
@@ -80,15 +115,17 @@ def send_email(to_address: str, subject: str, body: str, attachment_path: str = 
         server.sendmail(gmail_address, to_address, text)
         server.quit()
     except Exception as e:
-        raise ValueError(f"An unexpected error occurred during email sending: {e}")
+        raise ValueError(f"An unexpected error occurred during email sending: {e}") from e
 
-import os
-import subprocess
-import tempfile
-
-def webpage_to_pdf(url: str, output_path: str):
-    """
-    Converts a webpage to PDF using wkhtmltopdf.
+def webpage_to_pdf(url: str, output_path: str) -> None:
+    """Convert a webpage to PDF using wkhtmltopdf.
+    
+    Args:
+        url: The URL of the webpage to convert
+        output_path: The path where the PDF should be saved
+        
+    Raises:
+        Exception: If conversion fails
     """
     tmp_output = tempfile.mktemp('temp.pdf')
     try:
@@ -98,24 +135,31 @@ def webpage_to_pdf(url: str, output_path: str):
         )
     except subprocess.CalledProcessError as e:
         if not os.path.exists(tmp_output):
-            raise Exception(f"Error converting to PDF with wkhtmltopdf: {e.stderr}")
+            raise Exception(f"Error converting to PDF with wkhtmltopdf: {e.stderr}") from e
     except Exception as e:
-        raise Exception(f"An unexpected error occurred: {e}")
+        raise Exception(f"An unexpected error occurred: {e}") from e
     finally:
         if os.path.exists(tmp_output):
             os.rename(tmp_output, output_path)
 
-def send_email_to_kindle(attachment_path: str):
-    """
-    Sends an email with an attachment to the Kindle email address.
-    Requires GMAIL_ADDRESS, GMAIL_APP_PASSWORD, and KINDLE_ADDRESS to be set as environment variables.
+def send_email_to_kindle(attachment_path: str) -> None:
+    """Send an email with an attachment to the Kindle email address.
+    
+    Args:
+        attachment_path: Path to the file to send to Kindle
+        
+    Raises:
+        ValueError: If environment variables are missing or email sending fails
+        FileNotFoundError: If attachment file doesn't exist
     """
     gmail_address = os.getenv("GMAIL_ADDRESS")
     gmail_app_password = os.getenv("GMAIL_APP_PASSWORD")
     kindle_address = os.getenv("KINDLE_ADDRESS")
 
     if not gmail_address or not gmail_app_password or not kindle_address:
-        raise ValueError("GMAIL_ADDRESS, GMAIL_APP_PASSWORD, and KINDLE_ADDRESS environment variables must be set.")
+        raise ValueError(
+            "GMAIL_ADDRESS, GMAIL_APP_PASSWORD, and KINDLE_ADDRESS environment variables must be set."
+        )
 
     msg = MIMEMultipart()
     msg['From'] = gmail_address
@@ -143,33 +187,39 @@ def send_email_to_kindle(attachment_path: str):
         server.sendmail(gmail_address, kindle_address, text)
         server.quit()
     except Exception as e:
-        raise ValueError(f"An unexpected error occurred during email sending: {e}")
+        raise ValueError(f"An unexpected error occurred during email sending: {e}") from e
 
-def save_summary(summary: str, file_path: str):
-    """
-    Saves the given summary to a file.
+def save_summary(summary: str, file_path: str) -> None:
+    """Save the given summary to a file.
+    
+    Args:
+        summary: The summary text to save
+        file_path: The path where the summary should be saved
+        
+    Raises:
+        ValueError: If file writing fails
     """
     try:
-        with open(file_path, "w") as f:
+        with open(file_path, "w", encoding="utf-8") as f:
             f.write(summary)
     except Exception as e:
-        raise ValueError(f"An unexpected error occurred during summary saving: {e}")
+        raise ValueError(f"An unexpected error occurred during summary saving: {e}") from e
 
-
-import shutil
-import tiktoken
-
-# Get the encoding for a default model.
-# cl100k_base is the encoding used by gpt-4, gpt-3.5-turbo, and text-embedding-ada-002.
-encoding = tiktoken.get_encoding("cl100k_base")
 
 def get_trash_directory() -> str:
-    """Returns the absolute path to the trash directory."""
+    """Get the absolute path to the trash directory.
+    
+    Returns:
+        str: Absolute path to the trash directory
+    """
     return os.path.join(os.getcwd(), "data", "trash")
 
-def empty_trash():
-    """
-    Permanently deletes all files and subdirectories in the trash directory.
+
+def empty_trash() -> None:
+    """Permanently delete all files and subdirectories in the trash directory.
+    
+    Raises:
+        ValueError: If deletion of any file/directory fails
     """
     trash_dir = get_trash_directory()
     if not os.path.exists(trash_dir):
@@ -183,12 +233,17 @@ def empty_trash():
             elif os.path.isdir(file_path):
                 shutil.rmtree(file_path)
         except Exception as e:
-            raise ValueError(f"Failed to delete {file_path}. Reason: {e}")
+            raise ValueError(f"Failed to delete {file_path}. Reason: {e}") from e
 
 
 def estimate_tokens(message_history: list) -> int:
-    """
-    Estimates the token count of a message history using the tiktoken library.
+    """Estimate the token count of a message history using the tiktoken library.
+    
+    Args:
+        message_history: List of PromptMessage objects with content attributes
+        
+    Returns:
+        int: Estimated token count for the message history
     """
     token_count = 0
     for message in message_history:
@@ -196,11 +251,11 @@ def estimate_tokens(message_history: list) -> int:
         # content can be a string or a list of content blocks
         content = message.content
         if isinstance(content, str):
-            token_count += len(encoding.encode(content))
+            token_count += len(ENCODING.encode(content))
         elif isinstance(content, list):
             for block in content:
                 if isinstance(block, str):
-                    token_count += len(encoding.encode(block))
+                    token_count += len(ENCODING.encode(block))
                 elif hasattr(block, 'text'):
-                    token_count += len(encoding.encode(block.text))
+                    token_count += len(ENCODING.encode(block.text))
     return token_count
