@@ -9,6 +9,9 @@ mcp:
     calculator:
       command: "uv"
       args: ["run", "python", "-m", "mcp_server_calculator"]
+    fetch:
+      command: "uv"
+      args: ["run", "python", "-m", "mcp_server_fetch"]
     context7:
       command: "npx"
       args: ["-y", "@upstash/context7-mcp"]
