@@ -5,6 +5,7 @@ import shutil
 import smtplib
 import subprocess
 import tempfile
+import time
 from email import encoders
 from email.mime.base import MIMEBase
 from email.mime.multipart import MIMEMultipart
@@ -34,26 +35,80 @@ def get_save_directory(*args) -> str:
     return os.path.join(os.getcwd(), "data", *args)
 
 
-def download_file(url: str, save_path: str) -> None:
-    """Download a file from the given URL and save it to the specified path.
+def download_file(url: str, subdirectory: str) -> str:
+    """Download a file from the given URL with automatic filename detection.
     
     Args:
         url: The URL to download from
-        save_path: The local path where the file should be saved
+        subdirectory: Subdirectory under 'data' to save the file
+        
+    Returns:
+        str: The full path where the file was saved
         
     Raises:
         ValueError: If there's an error during download
     """
-    # Sanitize file_name to prevent directory traversal
-    save_directory = os.path.dirname(save_path)
-    os.makedirs(save_directory, exist_ok=True)
-
+    import mimetypes
+    from urllib.parse import urlparse, unquote
+    
     try:
         response = httpx.get(url, follow_redirects=True)
         response.raise_for_status()  # Raise an exception for HTTP errors
 
+        # Try to detect filename from various sources
+        filename = None
+        
+        # 1. Try Content-Disposition header
+        content_disposition = response.headers.get('content-disposition', '')
+        if 'filename=' in content_disposition:
+            filename = content_disposition.split('filename=')[1].strip('\\"')
+            filename = unquote(filename)  # Decode URL encoding
+        
+        # 2. Try to extract from URL path
+        if not filename:
+            parsed_url = urlparse(url)
+            url_filename = os.path.basename(parsed_url.path)
+            if url_filename and '.' in url_filename:
+                filename = unquote(url_filename)
+        
+        # 3. Generate filename based on content type
+        if not filename:
+            content_type = response.headers.get('content-type', '').split(';')[0]
+            extension = mimetypes.guess_extension(content_type) or '.bin'
+            
+            # Create a more descriptive name based on domain and timestamp
+            domain = urlparse(url).netloc.replace('www.', '').replace('.', '_')
+            timestamp = int(time.time())
+            filename = f"document_{domain}_{timestamp}{extension}"
+        
+        # Sanitize filename to prevent directory traversal and handle special characters
+        filename = os.path.basename(filename)  # Remove any path components
+        filename = "".join(c if c.isalnum() or c in '.-_ ()[]{}' else '_' for c in filename)
+        
+        # Ensure we have a file extension
+        if '.' not in filename:
+            content_type = response.headers.get('content-type', '').split(';')[0]
+            extension = mimetypes.guess_extension(content_type) or '.bin'
+            filename += extension
+        
+        # Create save path
+        save_directory = get_save_directory(subdirectory)
+        os.makedirs(save_directory, exist_ok=True)
+        save_path = os.path.join(save_directory, filename)
+        
+        # Handle filename conflicts by adding a number
+        counter = 1
+        original_save_path = save_path
+        while os.path.exists(save_path):
+            name, ext = os.path.splitext(original_save_path)
+            save_path = f"{name}_{counter}{ext}"
+            counter += 1
+
         with open(save_path, "wb") as f:
             f.write(response.content)
+            
+        return save_path
+        
     except httpx.RequestError as e:
         raise ValueError(f"Error making HTTP request: {e}") from e
     except httpx.HTTPStatusError as e:

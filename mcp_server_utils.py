@@ -14,24 +14,22 @@ fast_mcp = FastMCP("mcp-server-utils")
 encoding = tiktoken.get_encoding("cl100k_base")
 
 @fast_mcp.tool()
-def download_file(url: str, subdirectory: str, file_name: str) -> str:
-    """Download a file from the given URL and save it to the 'data' folder.
+def download_file(url: str, subdirectory: str) -> str:
+    """Download a file from the given URL with automatic filename detection.
     
     Args:
         url: The URL to download from
         subdirectory: Subdirectory under 'data' to save the file
-        file_name: Name for the saved file
         
     Returns:
-        str: Success or error message
+        str: Success message with the saved file path or error message
     """
     try:
-        save_dir = utils.get_save_directory(subdirectory)
-        save_path = os.path.join(save_dir, file_name)
-        utils.download_file(url, save_path)
-        return f"File {file_name} successfully downloaded"
+        saved_path = utils.download_file(url, subdirectory)
+        filename = os.path.basename(saved_path)
+        return f"File successfully downloaded as '{filename}' to {saved_path}"
     except Exception as e:
-        return f"Failed to download file {url}: {e}"
+        return f"Failed to download file from {url}: {e}"
 
 @fast_mcp.tool()
 def pdf_to_text(file_path: str, truncate_limit_tokens: int = 500) -> str:
