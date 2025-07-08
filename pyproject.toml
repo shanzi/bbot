@@ -8,7 +8,6 @@ dependencies = [
     "fast-agent-mcp",
     "mcp-server-time",
     "mcp-server-calculator",
-    "mcp-server-fetch",
     "mcp-weather-server",
     "python-telegram-bot",
     "python-dotenv",
