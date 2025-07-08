@@ -259,6 +259,19 @@ async def _process_agent_response(agent_to_use, user_message, context, chat_id, 
     image_tags = re.findall(r'!\[(.*?)\]\((.*?)\)', response_text)
     logger.info(f"Found {len(image_tags)} image tags in the response.")
     
+    # Find file attachment directives in the response
+    # Pattern matches ATTACH_FILE: followed by path until end of line or backtick
+    attach_file_pattern = r'ATTACH_FILE:([^`\n]+)'
+    file_attachments = re.findall(attach_file_pattern, response_text)
+    # Strip whitespace from file paths
+    file_attachments = [path.strip() for path in file_attachments]
+    logger.info(f"Found {len(file_attachments)} file attachments in the response.")
+    
+    # Remove ATTACH_FILE directives from response text before sending
+    clean_response_text = re.sub(r'`?ATTACH_FILE:[^`\n]+`?\n?', '', response_text).strip()
+    # Clean up multiple consecutive newlines
+    clean_response_text = re.sub(r'\n\s*\n\s*\n', '\n\n', clean_response_text)
+    
     media_group = []
     for alt_text, file_path in image_tags:
         if not os.path.isabs(file_path):
@@ -275,7 +288,7 @@ async def _process_agent_response(agent_to_use, user_message, context, chat_id, 
         else:
             logger.warning(f"Image not found at {file_path}")
 
-    telegram_response = markdownify(response_text)
+    telegram_response = markdownify(clean_response_text)
     await context.bot.edit_message_text(
         chat_id=chat_id,
         message_id=message_id,
@@ -285,6 +298,24 @@ async def _process_agent_response(agent_to_use, user_message, context, chat_id, 
     
     if media_group:
         await context.bot.send_media_group(chat_id=chat_id, media=media_group)
+    
+    # Send file attachments
+    for file_path in file_attachments:
+        if os.path.exists(file_path):
+            logger.info(f"Sending file attachment: {file_path}")
+            with open(file_path, 'rb') as file:
+                await context.bot.send_document(
+                    chat_id=chat_id,
+                    document=file,
+                    filename=os.path.basename(file_path),
+                    caption=f"📄 {os.path.basename(file_path)}"
+                )
+        else:
+            logger.warning(f"File attachment not found: {file_path}")
+            await context.bot.send_message(
+                chat_id=chat_id,
+                text=f"❌ File not found: {os.path.basename(file_path)}"
+            )
 
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
