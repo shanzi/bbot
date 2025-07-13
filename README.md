@@ -13,6 +13,7 @@ This project implements a sophisticated Telegram bot that integrates with `fast-
 ### 📄 **Document Management**
 *   **PDF Processing:** Text extraction, thumbnail generation, margin trimming
 *   **File Upload Support:** Documents and images with automatic processing
+*   **Multimodal Image Support:** Send images with captions directly to AI models for analysis
 *   **Webpage to PDF:** Convert web pages to PDF documents for storage
 *   **Document Summarization:** Automatic content analysis and markdown summary generation
 *   **Organized Storage:** Structured folder system (documents, attachments, thumbnails, cropped, trash)
@@ -37,6 +38,7 @@ This project implements a sophisticated Telegram bot that integrates with `fast-
 *   `/help`: Display available commands and usage
 *   `/trim_context <number>`: Trim conversation history to specified message count
 *   **File Uploads:** Drag & drop documents and images for processing
+*   **Image Analysis:** Send images with captions for AI visual analysis (512x512 optimized)
 *   **Inline Responses:** Real-time processing updates and media sharing
 
 ## Setup
@@ -129,6 +131,7 @@ uv run python main.py
 - **Thumbnail Generation:** Creates preview images for PDFs
 - **Margin Trimming:** Removes whitespace from PDF pages
 - **Format Conversion:** Convert web pages to PDFs
+- **Image Processing:** Automatic image compression and optimization for AI analysis
 
 #### File Management
 - **Organized Storage:** Files are automatically categorized

@@ -1,7 +1,9 @@
 """Telegram bot with FastAgent AI integration for document management."""
 
 import asyncio
+import base64
 import datetime
+import io
 import logging
 import os
 import re
@@ -9,6 +11,9 @@ import time
 import zoneinfo
 
 from dotenv import load_dotenv
+from mcp.types import ImageContent, TextContent, Role
+from mcp_agent.mcp.prompt_message_multipart import PromptMessageMultipart
+from PIL import Image
 from telegram import (
     BotCommand,
     InlineKeyboardButton,
@@ -66,6 +71,37 @@ try:
     LOCAL_TIMEZONE = datetime.datetime.now().astimezone().tzinfo
 except Exception:
     LOCAL_TIMEZONE = "UTC"  # Fallback if timezone detection fails
+
+def downscale_image(image_path: str, max_size: tuple = (512, 512), quality: int = 60) -> bytes:
+    """Downscale image to minimal size for token efficiency while maintaining readability.
+    
+    Args:
+        image_path: Path to the original image file
+        max_size: Maximum dimensions (width, height) for the resized image
+        quality: JPEG quality (1-100) when saving the image
+        
+    Returns:
+        bytes: Heavily compressed image data as bytes
+    """
+    with Image.open(image_path) as img:
+        # Convert to RGB if necessary (for JPEG compatibility)
+        if img.mode in ('RGBA', 'LA', 'P'):
+            img = img.convert('RGB')
+        
+        # Calculate new size maintaining aspect ratio
+        img.thumbnail(max_size, Image.Resampling.LANCZOS)
+        
+        # Save to bytes buffer with aggressive compression
+        buffer = io.BytesIO()
+        img.save(
+            buffer, 
+            format='JPEG', 
+            quality=quality,
+            optimize=True,
+            progressive=True,
+            subsampling=2  # More aggressive chroma subsampling
+        )
+        return buffer.getvalue()
 
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Send a message when the command /start is issued, and ask for model selection."""
@@ -184,7 +220,7 @@ async def _handle_document_upload(update, context, chat_id, message_id):
 
 
 async def _handle_photo_upload(update, context, chat_id, message_id):
-    """Handle photo upload and return image info."""
+    """Handle photo upload and return tuple of (ImageContent, caption_text)."""
     await context.bot.edit_message_text(
         chat_id=chat_id,
         message_id=message_id,
@@ -198,7 +234,27 @@ async def _handle_photo_upload(update, context, chat_id, message_id):
     file_extension = file.file_path.split('.')[-1] if file.file_path else 'jpg'
     target = os.path.join(target_dir, f"{int(time.time()*1000)}.{file_extension}")
     await file.download_to_drive(target)
-    return f"(image downloaded to {target})"
+    
+    await context.bot.edit_message_text(
+        chat_id=chat_id,
+        message_id=message_id,
+        text="Processing image..."
+    )
+    
+    # Downscale the image to reduce tokens (512x512 default)
+    downscaled_image_data = downscale_image(target)
+    image_data = base64.b64encode(downscaled_image_data).decode('utf-8')
+    
+    image_content = ImageContent(
+        type="image",
+        mimeType="image/jpeg",  # Always JPEG after downscaling
+        data=image_data
+    )
+    
+    # Extract caption if present
+    caption_text = update.message.caption or ""
+    
+    return image_content, caption_text
 
 
 async def _get_or_create_agent(chat_id, context, message_id):
@@ -230,7 +286,7 @@ async def _get_or_create_agent(chat_id, context, message_id):
     return agent_to_use
 
 
-async def _process_agent_response(agent_to_use, user_message, context, chat_id, message_id):
+async def _process_agent_response(agent_to_use, message_contents, context, chat_id, message_id):
     """Process message with agent and send response."""
     await context.bot.edit_message_text(
         chat_id=chat_id,
@@ -246,10 +302,19 @@ async def _process_agent_response(agent_to_use, user_message, context, chat_id, 
     estimated_tokens = utils.estimate_tokens(actual_agent.message_history)
     logger.info(f"Calling agent with ~{estimated_tokens} tokens.")
 
-    # Generate the response as a PromptMessageMultipart object
-    response_multipart = await actual_agent.generate(
-        [actual_agent._normalize_message_input(user_message)], None
+    # Log multipart message construction
+    logger.info(f"Creating multipart message with {len(message_contents)} content parts")
+    for i, content in enumerate(message_contents):
+        logger.info(f"Content {i}: {type(content).__name__} - {content.type}")
+
+    # Create PromptMessageMultipart directly
+    multipart_message = PromptMessageMultipart(
+        role="user",
+        content=message_contents
     )
+    
+    # Generate the response using the multipart message
+    response_multipart = await actual_agent.generate([multipart_message], None)
 
     # Get only the last text content (final assistant response)
     response_text = response_multipart.last_text()
@@ -327,19 +392,40 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     )
 
     try:
-        # Handle text messages
-        user_message = update.message.text or ""
+        # Prepare message contents list for multimodal support
+        message_contents = []
+        
+        # Handle text messages (can be combined with attachments)
+        if update.message.text:
+            user_text = update.message.text
+            message_contents.append(TextContent(type="text", text=user_text))
         
         # Handle document attachments
         if update.message.document:
-            user_message += await _handle_document_upload(
+            attachment_info = await _handle_document_upload(
                 update, context, chat_id, placeholder_message.message_id
             )
+            message_contents.append(TextContent(type="text", text=attachment_info))
+        
         # Handle photo attachments
-        elif update.message.photo:
-            user_message += await _handle_photo_upload(
+        if update.message.photo:
+            image_content, caption_text = await _handle_photo_upload(
                 update, context, chat_id, placeholder_message.message_id
             )
+            # Add caption as text content if present
+            if caption_text:
+                message_contents.append(TextContent(type="text", text=caption_text))
+            # Add the image content
+            message_contents.append(image_content)
+
+        # Ensure we have content to send
+        if not message_contents:
+            await context.bot.edit_message_text(
+                chat_id=chat_id,
+                message_id=placeholder_message.message_id,
+                text="No content to process."
+            )
+            return
 
         # Get or initialize agent
         agent_to_use = await _get_or_create_agent(
@@ -350,7 +436,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
         # Process message with agent
         await _process_agent_response(
-            agent_to_use, user_message, context, chat_id, placeholder_message.message_id
+            agent_to_use, message_contents, context, chat_id, placeholder_message.message_id
         )
 
     except Exception as e:

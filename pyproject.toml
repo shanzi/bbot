@@ -15,4 +15,5 @@ dependencies = [
     "mcp[cli]",
     "tiktoken",
     "pandocfilters>=1.5.1",
+    "pillow>=11.3.0",
 ]
