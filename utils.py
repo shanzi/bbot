@@ -23,6 +23,30 @@ load_dotenv()
 ENCODING = tiktoken.get_encoding("cl100k_base")
 
 
+def get_allowed_email_addresses() -> set:
+    """Get the set of allowed email addresses for sending emails.
+    
+    Includes addresses from ALLOWED_EMAIL_ADDRESSES environment variable
+    and automatically includes the Kindle address if configured.
+    
+    Returns:
+        set: Set of allowed email addresses
+    """
+    allowed_addresses = set()
+    
+    # Get allowed addresses from environment variable (comma-separated)
+    allowed_env = os.getenv("ALLOWED_EMAIL_ADDRESSES", "")
+    if allowed_env:
+        allowed_addresses.update(addr.strip() for addr in allowed_env.split(","))
+    
+    # Always include Kindle address if configured
+    kindle_address = os.getenv("KINDLE_ADDRESS")
+    if kindle_address:
+        allowed_addresses.add(kindle_address.strip())
+    
+    return allowed_addresses
+
+
 def get_save_directory(*args) -> str:
     """Get the absolute path to a subdirectory within the data folder.
     
@@ -129,9 +153,22 @@ def send_email(to_address: str, subject: str, body: str, attachment_path: str = 
         attachment_path: Optional path to file to attach
         
     Raises:
-        ValueError: If environment variables are missing or email sending fails
+        ValueError: If environment variables are missing, recipient not allowed, or email sending fails
         FileNotFoundError: If attachment file doesn't exist
     """
+    # Check if the recipient is in the allow list
+    allowed_addresses = get_allowed_email_addresses()
+    if not allowed_addresses:
+        raise ValueError(
+            "No allowed email addresses configured. Set ALLOWED_EMAIL_ADDRESSES environment variable."
+        )
+    
+    if to_address not in allowed_addresses:
+        raise ValueError(
+            f"Email address '{to_address}' is not in the allowed list. "
+            f"Please add it to ALLOWED_EMAIL_ADDRESSES environment variable."
+        )
+    
     gmail_address = os.getenv("GMAIL_ADDRESS")
     gmail_app_password = os.getenv("GMAIL_APP_PASSWORD")
 
