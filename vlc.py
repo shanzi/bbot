@@ -1,5 +1,6 @@
 """VLC Chromecast control module for streaming movies to casting devices."""
 
+import io
 import os
 import subprocess
 import time
@@ -24,8 +25,9 @@ class VLCChromecast:
         self.chromecast_ip = chromecast_ip or os.getenv("CHROMECAST_IP", "192.168.0.203")
         self.process: Optional[subprocess.Popen] = None
         self.current_movie: Optional[str] = None
-        self.control_pipe = "/tmp/vlc_control.pipe"
+        self.control_file = "/tmp/vlc_control.stdin"
         self.pid_file = "/tmp/vlc_chromecast.pid"
+        self.control_file_handle: Optional[io.TextIOWrapper] = None
     
     def start_casting(self, movie_path: str) -> bool:
         """Start casting a movie to Chromecast.
@@ -43,10 +45,10 @@ class VLCChromecast:
         self._kill_previous_vlc()
         self.stop_casting()
         
-        # Create named pipe for shared control
-        self._create_control_pipe()
+        # Create control file for shared stdin
+        self._create_control_file()
         
-        # VLC command for Chromecast with named pipe control interface
+        # VLC command for Chromecast with stdin control interface
         vlc_cmd = [
             "vlc",
             movie_path,
@@ -54,14 +56,15 @@ class VLCChromecast:
             f"--sout-chromecast-ip={self.chromecast_ip}",
             "--demux-filter=demux_chromecast",
             "--intf", "rc",  # Remote control interface
-            "--rc-unix", self.control_pipe,  # Use named pipe for control
+            "--rc-fake-tty",  # Enable stdin control
             "--play-and-exit"  # Exit when playback finishes
         ]
         
         try:
-            # Start VLC process with stderr redirected to null
+            # Start VLC process with stdin redirected to our control file
             self.process = subprocess.Popen(
                 vlc_cmd,
+                stdin=open(self.control_file, 'r'),
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
                 preexec_fn=os.setsid  # Create new process group
@@ -80,14 +83,16 @@ class VLCChromecast:
         except Exception as e:
             raise RuntimeError(f"Failed to start VLC casting: {e}")
     
-    def _create_control_pipe(self) -> None:
-        """Create named pipe for VLC control if it doesn't exist."""
-        if not os.path.exists(self.control_pipe):
-            try:
-                os.mkfifo(self.control_pipe)
-            except FileExistsError:
-                # Pipe already exists, continue
-                pass
+    def _create_control_file(self) -> None:
+        """Create control file for VLC stdin if it doesn't exist."""
+        try:
+            # Create an empty file if it doesn't exist
+            if not os.path.exists(self.control_file):
+                with open(self.control_file, 'w') as f:
+                    pass  # Create empty file
+        except OSError:
+            # Failed to create control file
+            pass
     
     def _save_pid_file(self) -> None:
         """Save the current VLC process PID to a file."""
@@ -132,7 +137,7 @@ class VLCChromecast:
                 pass
     
     def send_command(self, command: str) -> bool:
-        """Send control command to VLC via named pipe.
+        """Send control command to VLC via control file.
         
         Args:
             command: VLC remote control command (play, pause, stop, seek, etc.)
@@ -140,13 +145,14 @@ class VLCChromecast:
         Returns:
             bool: True if command was sent successfully
         """
-        if not os.path.exists(self.control_pipe):
+        if not os.path.exists(self.control_file):
             return False
             
         try:
-            with open(self.control_pipe, 'w') as pipe:
-                pipe.write(f"{command}\n")
-                pipe.flush()
+            # Append command to the control file
+            with open(self.control_file, 'a') as f:
+                f.write(f"{command}\n")
+                f.flush()
             return True
         except (OSError, IOError):
             return False
@@ -183,7 +189,7 @@ class VLCChromecast:
         """Stop VLC casting process."""
         if self.process and self.process.poll() is None:
             try:
-                # Send quit command via named pipe first
+                # Send quit command via control file first
                 self.send_command("quit")
                 # Wait for graceful shutdown
                 self.process.wait(timeout=3)
@@ -202,10 +208,10 @@ class VLCChromecast:
             self.process = None
             self.current_movie = None
         
-        # Clean up control pipe
-        if os.path.exists(self.control_pipe):
+        # Clean up control file
+        if os.path.exists(self.control_file):
             try:
-                os.unlink(self.control_pipe)
+                os.unlink(self.control_file)
             except OSError:
                 pass
         
@@ -232,8 +238,8 @@ class VLCChromecast:
             "is_playing": self.is_playing(),
             "current_movie": self.current_movie,
             "chromecast_ip": self.chromecast_ip,
-            "control_method": "named_pipe",
-            "control_pipe": self.control_pipe,
+            "control_method": "stdin_file",
+            "control_file": self.control_file,
             "pid_file": self.pid_file,
             "current_pid": self.process.pid if self.process else None
         }

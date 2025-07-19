@@ -294,7 +294,7 @@ async def call_tool(name: str, arguments: Dict[str, Any]) -> List[TextContent]:
             result += f"Playing: {'✅ Yes' if status['is_playing'] else '❌ No'}\n"
             result += f"Chromecast IP: {status['chromecast_ip']}\n"
             result += f"Control Method: {status['control_method']}\n"
-            result += f"Control Pipe: {status['control_pipe']}\n"
+            result += f"Control File: {status['control_file']}\n"
             result += f"PID File: {status['pid_file']}\n"
             result += f"Current PID: {status['current_pid'] or 'None'}\n"
             
