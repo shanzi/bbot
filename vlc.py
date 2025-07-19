@@ -24,6 +24,7 @@ class VLCChromecast:
         self.chromecast_ip = chromecast_ip or os.getenv("CHROMECAST_IP", "192.168.0.203")
         self.process: Optional[subprocess.Popen] = None
         self.current_movie: Optional[str] = None
+        self.control_pipe = "/tmp/vlc_control.pipe"
     
     def start_casting(self, movie_path: str) -> bool:
         """Start casting a movie to Chromecast.
@@ -40,7 +41,10 @@ class VLCChromecast:
         # Stop any existing VLC process
         self.stop_casting()
         
-        # VLC command for Chromecast with stdin control interface
+        # Create named pipe for shared control
+        self._create_control_pipe()
+        
+        # VLC command for Chromecast with named pipe control interface
         vlc_cmd = [
             "vlc",
             movie_path,
@@ -48,18 +52,16 @@ class VLCChromecast:
             f"--sout-chromecast-ip={self.chromecast_ip}",
             "--demux-filter=demux_chromecast",
             "--intf", "rc",  # Remote control interface
-            "--rc-fake-tty",  # Enable stdin control
+            "--rc-unix", self.control_pipe,  # Use named pipe for control
             "--play-and-exit"  # Exit when playback finishes
         ]
         
         try:
-            # Start VLC process with stdin pipe for control and stderr redirected to null
+            # Start VLC process with stderr redirected to null
             self.process = subprocess.Popen(
                 vlc_cmd,
-                stdin=subprocess.PIPE,
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
-                text=True,  # Use text mode for easier string handling
                 preexec_fn=os.setsid  # Create new process group
             )
             
@@ -73,8 +75,17 @@ class VLCChromecast:
         except Exception as e:
             raise RuntimeError(f"Failed to start VLC casting: {e}")
     
+    def _create_control_pipe(self) -> None:
+        """Create named pipe for VLC control if it doesn't exist."""
+        if not os.path.exists(self.control_pipe):
+            try:
+                os.mkfifo(self.control_pipe)
+            except FileExistsError:
+                # Pipe already exists, continue
+                pass
+    
     def send_command(self, command: str) -> bool:
-        """Send control command to VLC via stdin.
+        """Send control command to VLC via named pipe.
         
         Args:
             command: VLC remote control command (play, pause, stop, seek, etc.)
@@ -82,14 +93,15 @@ class VLCChromecast:
         Returns:
             bool: True if command was sent successfully
         """
-        if not self.process or self.process.poll() is not None:
+        if not os.path.exists(self.control_pipe):
             return False
             
         try:
-            self.process.stdin.write(f"{command}\n")
-            self.process.stdin.flush()
+            with open(self.control_pipe, 'w') as pipe:
+                pipe.write(f"{command}\n")
+                pipe.flush()
             return True
-        except (OSError, IOError, BrokenPipeError):
+        except (OSError, IOError):
             return False
     
     def play(self) -> bool:
@@ -124,7 +136,7 @@ class VLCChromecast:
         """Stop VLC casting process."""
         if self.process and self.process.poll() is None:
             try:
-                # Send quit command via stdin first
+                # Send quit command via named pipe first
                 self.send_command("quit")
                 # Wait for graceful shutdown
                 self.process.wait(timeout=3)
@@ -142,6 +154,13 @@ class VLCChromecast:
             
             self.process = None
             self.current_movie = None
+        
+        # Clean up control pipe
+        if os.path.exists(self.control_pipe):
+            try:
+                os.unlink(self.control_pipe)
+            except OSError:
+                pass
                 
         return True
     
@@ -159,7 +178,8 @@ class VLCChromecast:
             "is_playing": self.is_playing(),
             "current_movie": self.current_movie,
             "chromecast_ip": self.chromecast_ip,
-            "control_method": "stdin"
+            "control_method": "named_pipe",
+            "control_pipe": self.control_pipe
         }
 
 
