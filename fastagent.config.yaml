@@ -21,4 +21,7 @@ mcp:
     utils:
       command: "uv"
       args: ["run", "python", "-m", "mcp_server_utils"]
+    vlc:
+      command: "uv"
+      args: ["run", "python", "mcp_vlc_server.py"]
     

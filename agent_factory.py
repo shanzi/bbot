@@ -27,7 +27,7 @@ def get_fast_agent_app(model_name: str):
     @fast.agent(
         instruction=_get_agent_instruction(),
         model=model_name,
-        servers=["weather", "utils", "time", "calculator", "fetch", "context7", "filesystem"],
+        servers=["weather", "utils", "time", "calculator", "fetch", "context7", "filesystem", "vlc"],
     )
     async def main_agent():
         """Main agent function - controlled externally."""
@@ -74,7 +74,17 @@ def _get_agent_instruction() -> str:
         "Always use the full absolute path to the file. The message handler will parse this and send the actual file to the user via Telegram. "
         "Do NOT use this for images - images should still use the Markdown syntax above. Only use ATTACH_FILE for documents that users want to download or receive directly. "
         "\n\n"
-        "You can also get weather information, get the current date and time, perform arithmetic calculations, and manage files. However, your core purpose is to be a document management assistant with intelligent content-based file organization. "
+        "You can also get weather information, get the current date and time, perform arithmetic calculations, and manage files. "
+        "\n\n**VLC CHROMECAST CONTROL:** You have access to VLC Chromecast functionality through the `vlc` server. You can: "
+        "- List movies in the media library using `list_movies` "
+        "- Search for specific movies using `find_movies` with a query "
+        "- Start casting movies to Chromecast using `start_casting` with the movie file path "
+        "- Control playback with `control_playback` (play, pause, stop, seek, volume) "
+        "- Check VLC status using `get_vlc_status` "
+        "- Stop casting using `stop_casting` "
+        "The default Chromecast IP is 192.168.0.203 but can be customized. When users ask to watch movies, help them find and cast content. "
+        "\n\n"
+        "However, your core purpose is to be a document management assistant with intelligent content-based file organization. "
         "When a user asks to delete a file, first move it to the 'data/trash' directory using the `filesystem` tool. "
         "When a user asks to empty the trash, first list the files in the 'data/trash' directory using the `filesystem` tool, show the user the files to be deleted, and ask for confirmation before calling the `empty_trash` tool."
     )
