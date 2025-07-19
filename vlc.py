@@ -25,6 +25,7 @@ class VLCChromecast:
         self.process: Optional[subprocess.Popen] = None
         self.current_movie: Optional[str] = None
         self.control_pipe = "/tmp/vlc_control.pipe"
+        self.pid_file = "/tmp/vlc_chromecast.pid"
     
     def start_casting(self, movie_path: str) -> bool:
         """Start casting a movie to Chromecast.
@@ -38,7 +39,8 @@ class VLCChromecast:
         if not os.path.exists(movie_path):
             raise FileNotFoundError(f"Movie file not found: {movie_path}")
         
-        # Stop any existing VLC process
+        # Kill any previous VLC process and stop current instance
+        self._kill_previous_vlc()
         self.stop_casting()
         
         # Create named pipe for shared control
@@ -67,6 +69,9 @@ class VLCChromecast:
             
             self.current_movie = movie_path
             
+            # Save PID file for process management
+            self._save_pid_file()
+            
             # Wait a moment for VLC to initialize
             time.sleep(2)
             
@@ -82,6 +87,48 @@ class VLCChromecast:
                 os.mkfifo(self.control_pipe)
             except FileExistsError:
                 # Pipe already exists, continue
+                pass
+    
+    def _save_pid_file(self) -> None:
+        """Save the current VLC process PID to a file."""
+        if self.process:
+            try:
+                with open(self.pid_file, 'w') as f:
+                    f.write(str(self.process.pid))
+            except OSError:
+                # Failed to write PID file, continue anyway
+                pass
+    
+    def _kill_previous_vlc(self) -> None:
+        """Kill any previous VLC process using the PID file."""
+        if not os.path.exists(self.pid_file):
+            return
+            
+        try:
+            with open(self.pid_file, 'r') as f:
+                pid_str = f.read().strip()
+                if pid_str:
+                    pid = int(pid_str)
+                    # Check if process exists and kill it
+                    try:
+                        os.killpg(os.getpgid(pid), 15)  # SIGTERM
+                        time.sleep(1)
+                        # Force kill if still running
+                        try:
+                            os.killpg(os.getpgid(pid), 9)  # SIGKILL
+                        except ProcessLookupError:
+                            pass
+                    except ProcessLookupError:
+                        # Process doesn't exist anymore
+                        pass
+        except (OSError, ValueError):
+            # Failed to read PID file or invalid PID
+            pass
+        finally:
+            # Clean up PID file
+            try:
+                os.unlink(self.pid_file)
+            except OSError:
                 pass
     
     def send_command(self, command: str) -> bool:
@@ -161,6 +208,13 @@ class VLCChromecast:
                 os.unlink(self.control_pipe)
             except OSError:
                 pass
+        
+        # Clean up PID file
+        if os.path.exists(self.pid_file):
+            try:
+                os.unlink(self.pid_file)
+            except OSError:
+                pass
                 
         return True
     
@@ -179,7 +233,9 @@ class VLCChromecast:
             "current_movie": self.current_movie,
             "chromecast_ip": self.chromecast_ip,
             "control_method": "named_pipe",
-            "control_pipe": self.control_pipe
+            "control_pipe": self.control_pipe,
+            "pid_file": self.pid_file,
+            "current_pid": self.process.pid if self.process else None
         }
 
 

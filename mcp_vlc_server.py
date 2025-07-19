@@ -295,6 +295,8 @@ async def call_tool(name: str, arguments: Dict[str, Any]) -> List[TextContent]:
             result += f"Chromecast IP: {status['chromecast_ip']}\n"
             result += f"Control Method: {status['control_method']}\n"
             result += f"Control Pipe: {status['control_pipe']}\n"
+            result += f"PID File: {status['pid_file']}\n"
+            result += f"Current PID: {status['current_pid'] or 'None'}\n"
             
             if status['current_movie']:
                 movie_name = status['current_movie'].split("/")[-1]
