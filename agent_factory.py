@@ -82,7 +82,7 @@ def _get_agent_instruction() -> str:
         "- Control playback with `control_playback` (play, pause, stop, seek, volume) "
         "- Check VLC status using `get_vlc_status` "
         "- Stop casting using `stop_casting` "
-        "The default Chromecast IP is 192.168.0.203 but can be customized. When users ask to watch movies, help them find and cast content. "
+        "The Chromecast IP is configured via CHROMECAST_IP environment variable (defaults to 192.168.0.203). When users ask to watch movies, help them find and cast content. "
         "\n\n"
         "However, your core purpose is to be a document management assistant with intelligent content-based file organization. "
         "When a user asks to delete a file, first move it to the 'data/trash' directory using the `filesystem` tool. "

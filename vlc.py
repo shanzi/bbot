@@ -6,17 +6,22 @@ import time
 from pathlib import Path
 from typing import List, Optional, Dict, Any
 
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
+
 
 class VLCChromecast:
     """VLC Chromecast controller for streaming movies."""
     
-    def __init__(self, chromecast_ip: str = "192.168.0.203"):
+    def __init__(self, chromecast_ip: Optional[str] = None):
         """Initialize VLC Chromecast controller.
         
         Args:
-            chromecast_ip: IP address of the Chromecast device
+            chromecast_ip: IP address of the Chromecast device (optional, uses CHROMECAST_IP env var)
         """
-        self.chromecast_ip = chromecast_ip
+        self.chromecast_ip = chromecast_ip or os.getenv("CHROMECAST_IP", "192.168.0.203")
         self.process: Optional[subprocess.Popen] = None
         self.current_movie: Optional[str] = None
     

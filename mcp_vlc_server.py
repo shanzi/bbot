@@ -75,8 +75,8 @@ async def list_tools() -> List[Tool]:
                     },
                     "chromecast_ip": {
                         "type": "string",
-                        "description": "Chromecast IP address (optional, defaults to 192.168.0.203)",
-                        "default": "192.168.0.203"
+                        "description": "Chromecast IP address (optional, uses CHROMECAST_IP env var or 192.168.0.203)",
+                        "default": ""
                     }
                 },
                 "required": ["movie_path"],
@@ -177,7 +177,7 @@ async def call_tool(name: str, arguments: Dict[str, Any]) -> List[TextContent]:
         
         elif name == "start_casting":
             movie_path = arguments.get("movie_path", "")
-            chromecast_ip = arguments.get("chromecast_ip", "192.168.0.203")
+            chromecast_ip = arguments.get("chromecast_ip", "")
             
             if not movie_path:
                 return [TextContent(
@@ -185,8 +185,9 @@ async def call_tool(name: str, arguments: Dict[str, Any]) -> List[TextContent]:
                     text="Please provide a movie file path"
                 )]
             
-            # Update Chromecast IP if provided
-            vlc_ctrl.chromecast_ip = chromecast_ip
+            # Update Chromecast IP if provided, otherwise use environment default
+            if chromecast_ip:
+                vlc_ctrl.chromecast_ip = chromecast_ip
             
             try:
                 success = vlc_ctrl.start_casting(movie_path)

@@ -31,6 +31,7 @@ This project implements a sophisticated Telegram bot that integrates with `fast-
 *   **File System:** Advanced file operations (`@modelcontextprotocol/server-filesystem`)
 *   **Vector Search:** Document similarity search (`@upstash/context7-mcp`)
 *   **Custom PDF Tools:** Specialized PDF processing utilities
+*   **VLC Chromecast:** Stream movies to TV with playback control
 
 ### 💬 **Telegram Bot Commands**
 *   `/start`: Initialize bot and select AI model
@@ -39,6 +40,7 @@ This project implements a sophisticated Telegram bot that integrates with `fast-
 *   `/trim_context <number>`: Trim conversation history to specified message count
 *   **File Uploads:** Drag & drop documents and images for processing
 *   **Image Analysis:** Send images with captions for AI visual analysis (512x512 optimized)
+*   **Movie Streaming:** Ask to watch movies and control Chromecast playback
 *   **Inline Responses:** Real-time processing updates and media sharing
 
 ## Setup
@@ -47,9 +49,9 @@ This project implements a sophisticated Telegram bot that integrates with `fast-
 
 *   **Python 3.12+**
 *   **`uv`** - Modern Python package manager
-*   **System Tools:** `poppler-utils`, `wkhtmltopdf` (for PDF processing)
+*   **System Tools:** `poppler-utils`, `wkhtmltopdf` (for PDF processing), `vlc` (for Chromecast streaming)
 *   **API Keys:** Telegram Bot Token, AI provider API keys
-*   **Optional:** Gmail account for email features
+*   **Optional:** Gmail account for email features, Chromecast device for movie streaming
 
 ### Installation
 
@@ -71,13 +73,13 @@ This project implements a sophisticated Telegram bot that integrates with `fast-
     ```
     This will automatically install all dependencies from `pyproject.toml`.
 
-4.  **Install system dependencies (for PDF processing):**
+4.  **Install system dependencies:**
     ```bash
     # Ubuntu/Debian
-    sudo apt-get install poppler-utils wkhtmltopdf
+    sudo apt-get install poppler-utils wkhtmltopdf vlc
     
     # macOS (with Homebrew)
-    brew install poppler wkhtmltopdf
+    brew install poppler wkhtmltopdf vlc
     ```
 
 5.  **Create environment configuration:**
@@ -91,6 +93,10 @@ This project implements a sophisticated Telegram bot that integrates with `fast-
     GMAIL_ADDRESS="your-email@gmail.com"
     GMAIL_APP_PASSWORD="your-app-password"
     KINDLE_ADDRESS="your-kindle@kindle.com"
+    ALLOWED_EMAIL_ADDRESSES="user1@example.com,user2@example.com"
+    
+    # VLC Chromecast Configuration (optional - for movie streaming)
+    CHROMECAST_IP="192.168.0.203"
     ```
     
     **b. Create `fastagent.secrets.yaml`:**
@@ -142,6 +148,14 @@ uv run python main.py
 - **Document Sharing:** Send processed documents via email
 - **Kindle Delivery:** Direct document delivery to Kindle devices
 - **Notification Previews:** Thumbnail confirmations for sent documents
+- **Email Allow List:** Security feature to restrict email recipients
+
+#### VLC Chromecast Streaming
+- **Movie Library:** Automatic scanning of `/media/chase/Secondary/Movies`
+- **Search & Discovery:** Find movies by name with intelligent matching
+- **Chromecast Control:** Stream movies directly to TV with VLC
+- **Playback Management:** Play, pause, stop, seek, and volume control
+- **Environment Configuration:** Customizable Chromecast IP address
 
 ## Project Structure
 
@@ -150,7 +164,9 @@ bbot/
 ├── main.py                 # Main Telegram bot application
 ├── agent_factory.py        # AI agent creation and management
 ├── utils.py               # Utility functions for file operations
+├── vlc.py                 # VLC Chromecast controller
 ├── mcp_server_utils.py    # Custom MCP server for PDF tools
+├── mcp_vlc_server.py      # VLC Chromecast MCP server
 ├── fastagent.config.yaml  # MCP server configuration
 ├── data/                  # Document storage
 │   ├── document/          # Main document storage
