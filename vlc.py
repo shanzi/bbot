@@ -26,6 +26,9 @@ class VLCChromecast:
         self.process: Optional[subprocess.Popen] = None
         self.current_movie: Optional[str] = None
         self.pid_file = "/tmp/vlc_chromecast.pid"
+        
+        # Kill any previous VLC process on initialization to ensure only one instance
+        self._kill_previous_vlc()
     
     def start_casting(self, movie_path: str) -> bool:
         """Start casting a movie to Chromecast.
@@ -39,8 +42,7 @@ class VLCChromecast:
         if not os.path.exists(movie_path):
             raise FileNotFoundError(f"Movie file not found: {movie_path}")
         
-        # Kill any previous VLC process and stop current instance
-        self._kill_previous_vlc()
+        # Stop current instance if running
         self.stop_casting()
         
         # VLC command for Chromecast with stdin control interface
