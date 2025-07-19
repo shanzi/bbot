@@ -25,7 +25,6 @@ class VLCChromecast:
         self.chromecast_ip = chromecast_ip or os.getenv("CHROMECAST_IP", "192.168.0.203")
         self.process: Optional[subprocess.Popen] = None
         self.current_movie: Optional[str] = None
-        self.stdin_pipe = "/tmp/vlc_stdin.pipe"
         self.pid_file = "/tmp/vlc_chromecast.pid"
     
     def start_casting(self, movie_path: str) -> bool:
@@ -44,9 +43,6 @@ class VLCChromecast:
         self._kill_previous_vlc()
         self.stop_casting()
         
-        # Create named pipe for virtualized stdin
-        self._create_stdin_pipe()
-        
         # VLC command for Chromecast with stdin control interface
         vlc_cmd = [
             "vlc",
@@ -60,12 +56,13 @@ class VLCChromecast:
         ]
         
         try:
-            # Start VLC process with stdin redirected to our named pipe
+            # Start VLC process with stdin pipe for control
             self.process = subprocess.Popen(
                 vlc_cmd,
-                stdin=open(self.stdin_pipe, 'r'),
+                stdin=subprocess.PIPE,
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
+                text=True,  # Use text mode for easier string handling
                 preexec_fn=os.setsid  # Create new process group
             )
             
@@ -82,17 +79,6 @@ class VLCChromecast:
         except Exception as e:
             raise RuntimeError(f"Failed to start VLC casting: {e}")
     
-    def _create_stdin_pipe(self) -> None:
-        """Create named pipe for VLC stdin virtualization."""
-        if not os.path.exists(self.stdin_pipe):
-            try:
-                os.mkfifo(self.stdin_pipe)
-            except FileExistsError:
-                # Pipe already exists, continue
-                pass
-            except OSError:
-                # Failed to create pipe
-                pass
     
     def _save_pid_file(self) -> None:
         """Save the current VLC process PID to a file."""
@@ -137,7 +123,7 @@ class VLCChromecast:
                 pass
     
     def send_command(self, command: str) -> bool:
-        """Send control command to VLC via stdin pipe.
+        """Send control command to VLC via stdin.
         
         Args:
             command: VLC remote control command (play, pause, stop, seek, etc.)
@@ -145,16 +131,14 @@ class VLCChromecast:
         Returns:
             bool: True if command was sent successfully
         """
-        if not os.path.exists(self.stdin_pipe):
+        if not self.process or self.process.poll() is not None:
             return False
             
         try:
-            # Write command to the stdin pipe (non-blocking)
-            with open(self.stdin_pipe, 'w') as f:
-                f.write(f"{command}\n")
-                f.flush()
+            self.process.stdin.write(f"{command}\n")
+            self.process.stdin.flush()
             return True
-        except (OSError, IOError):
+        except (OSError, IOError, BrokenPipeError):
             return False
     
     def play(self) -> bool:
@@ -189,7 +173,7 @@ class VLCChromecast:
         """Stop VLC casting process."""
         if self.process and self.process.poll() is None:
             try:
-                # Send quit command via stdin pipe first
+                # Send quit command via stdin first
                 self.send_command("quit")
                 # Wait for graceful shutdown
                 self.process.wait(timeout=3)
@@ -208,12 +192,6 @@ class VLCChromecast:
             self.process = None
             self.current_movie = None
         
-        # Clean up stdin pipe
-        if os.path.exists(self.stdin_pipe):
-            try:
-                os.unlink(self.stdin_pipe)
-            except OSError:
-                pass
         
         # Clean up PID file
         if os.path.exists(self.pid_file):
@@ -238,8 +216,7 @@ class VLCChromecast:
             "is_playing": self.is_playing(),
             "current_movie": self.current_movie,
             "chromecast_ip": self.chromecast_ip,
-            "control_method": "stdin_pipe",
-            "stdin_pipe": self.stdin_pipe,
+            "control_method": "stdin",
             "pid_file": self.pid_file,
             "current_pid": self.process.pid if self.process else None
         }
