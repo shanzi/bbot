@@ -25,9 +25,8 @@ class VLCChromecast:
         self.chromecast_ip = chromecast_ip or os.getenv("CHROMECAST_IP", "192.168.0.203")
         self.process: Optional[subprocess.Popen] = None
         self.current_movie: Optional[str] = None
-        self.control_file = "/tmp/vlc_control.stdin"
+        self.stdin_pipe = "/tmp/vlc_stdin.pipe"
         self.pid_file = "/tmp/vlc_chromecast.pid"
-        self.control_file_handle: Optional[io.TextIOWrapper] = None
     
     def start_casting(self, movie_path: str) -> bool:
         """Start casting a movie to Chromecast.
@@ -45,8 +44,8 @@ class VLCChromecast:
         self._kill_previous_vlc()
         self.stop_casting()
         
-        # Create control file for shared stdin
-        self._create_control_file()
+        # Create named pipe for virtualized stdin
+        self._create_stdin_pipe()
         
         # VLC command for Chromecast with stdin control interface
         vlc_cmd = [
@@ -61,10 +60,10 @@ class VLCChromecast:
         ]
         
         try:
-            # Start VLC process with stdin redirected to our control file
+            # Start VLC process with stdin redirected to our named pipe
             self.process = subprocess.Popen(
                 vlc_cmd,
-                stdin=open(self.control_file, 'r'),
+                stdin=open(self.stdin_pipe, 'r'),
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
                 preexec_fn=os.setsid  # Create new process group
@@ -83,16 +82,17 @@ class VLCChromecast:
         except Exception as e:
             raise RuntimeError(f"Failed to start VLC casting: {e}")
     
-    def _create_control_file(self) -> None:
-        """Create control file for VLC stdin if it doesn't exist."""
-        try:
-            # Create an empty file if it doesn't exist
-            if not os.path.exists(self.control_file):
-                with open(self.control_file, 'w') as f:
-                    pass  # Create empty file
-        except OSError:
-            # Failed to create control file
-            pass
+    def _create_stdin_pipe(self) -> None:
+        """Create named pipe for VLC stdin virtualization."""
+        if not os.path.exists(self.stdin_pipe):
+            try:
+                os.mkfifo(self.stdin_pipe)
+            except FileExistsError:
+                # Pipe already exists, continue
+                pass
+            except OSError:
+                # Failed to create pipe
+                pass
     
     def _save_pid_file(self) -> None:
         """Save the current VLC process PID to a file."""
@@ -137,7 +137,7 @@ class VLCChromecast:
                 pass
     
     def send_command(self, command: str) -> bool:
-        """Send control command to VLC via control file.
+        """Send control command to VLC via stdin pipe.
         
         Args:
             command: VLC remote control command (play, pause, stop, seek, etc.)
@@ -145,12 +145,12 @@ class VLCChromecast:
         Returns:
             bool: True if command was sent successfully
         """
-        if not os.path.exists(self.control_file):
+        if not os.path.exists(self.stdin_pipe):
             return False
             
         try:
-            # Append command to the control file
-            with open(self.control_file, 'a') as f:
+            # Write command to the stdin pipe (non-blocking)
+            with open(self.stdin_pipe, 'w') as f:
                 f.write(f"{command}\n")
                 f.flush()
             return True
@@ -189,7 +189,7 @@ class VLCChromecast:
         """Stop VLC casting process."""
         if self.process and self.process.poll() is None:
             try:
-                # Send quit command via control file first
+                # Send quit command via stdin pipe first
                 self.send_command("quit")
                 # Wait for graceful shutdown
                 self.process.wait(timeout=3)
@@ -208,10 +208,10 @@ class VLCChromecast:
             self.process = None
             self.current_movie = None
         
-        # Clean up control file
-        if os.path.exists(self.control_file):
+        # Clean up stdin pipe
+        if os.path.exists(self.stdin_pipe):
             try:
-                os.unlink(self.control_file)
+                os.unlink(self.stdin_pipe)
             except OSError:
                 pass
         
@@ -238,8 +238,8 @@ class VLCChromecast:
             "is_playing": self.is_playing(),
             "current_movie": self.current_movie,
             "chromecast_ip": self.chromecast_ip,
-            "control_method": "stdin_file",
-            "control_file": self.control_file,
+            "control_method": "stdin_pipe",
+            "stdin_pipe": self.stdin_pipe,
             "pid_file": self.pid_file,
             "current_pid": self.process.pid if self.process else None
         }

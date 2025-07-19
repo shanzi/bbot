@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""Standalone VLC control script using the shared control file."""
+"""Standalone VLC control script using the virtualized stdin pipe."""
 
 import sys
 import os
 
 def send_vlc_command(command: str) -> bool:
-    """Send a command to VLC via the shared control file.
+    """Send a command to VLC via the virtualized stdin pipe.
     
     Args:
         command: VLC remote control command
@@ -13,15 +13,15 @@ def send_vlc_command(command: str) -> bool:
     Returns:
         bool: True if command was sent successfully
     """
-    control_file = "/tmp/vlc_control.stdin"
+    stdin_pipe = "/tmp/vlc_stdin.pipe"
     
-    if not os.path.exists(control_file):
-        print(f"Error: VLC control file {control_file} not found. Is VLC running?")
+    if not os.path.exists(stdin_pipe):
+        print(f"Error: VLC stdin pipe {stdin_pipe} not found. Is VLC running?")
         return False
     
     try:
-        # Append command to the control file
-        with open(control_file, 'a') as f:
+        # Write command to the stdin pipe
+        with open(stdin_pipe, 'w') as f:
             f.write(f"{command}\n")
             f.flush()
         print(f"✅ Sent command: {command}")
