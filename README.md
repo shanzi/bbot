@@ -2,6 +2,11 @@
 
 This project implements a sophisticated Telegram bot that integrates with `fast-agent` to provide AI-powered document management capabilities using multiple LLMs (OpenAI, Claude, Gemini). The bot specializes in document processing, PDF manipulation, web content conversion, and general AI assistance through Model Context Protocol (MCP) servers.
 
+## 🎬 Demo Videos
+
+- **📄 Managing Papers**: [Document Processing & Analysis](https://www.youtube.com/shorts/B_gIf8acNjc)
+- **🎥 Managing Movies**: [VLC Chromecast Control](https://www.youtube.com/shorts/FS5S8OySMws)
+
 ## Features
 
 ### 🤖 **Multi-Agent AI Support**
