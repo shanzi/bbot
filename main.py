@@ -106,11 +106,7 @@ def downscale_image(image_path: str, max_size: tuple = (512, 512), quality: int 
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Send a message when the command /start is issued, and ask for model selection."""
     user = update.effective_user
-    await update.message.reply_html(
-        f"Hi {user.mention_html()}! I'm a bot that can talk to different AI models. "
-        "Please choose a model to start our conversation."
-    )
-
+    
     aliases = list(SUPPORTED_MODELS.keys())
     keyboard = [
         [InlineKeyboardButton(alias.capitalize(), callback_data=alias) 
@@ -119,7 +115,8 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
 
-    await update.message.reply_text(
+    await update.message.reply_html(
+        f"Hi {user.mention_html()}! I'm a bot that can talk to different AI models.\n\n"
         "Which model would you like to use?",
         reply_markup=reply_markup,
     )
