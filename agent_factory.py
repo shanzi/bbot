@@ -27,7 +27,7 @@ def get_fast_agent_app(model_name: str):
     @fast.agent(
         instruction=_get_agent_instruction(),
         model=model_name,
-        servers=["weather", "utils", "time", "calculator", "fetch", "context7", "filesystem", "vlc"],
+        servers=["weather", "utils", "time", "calculator", "fetch", "context7", "filesystem", "vlc", "calibre"],
     )
     async def main_agent():
         """Main agent function - controlled externally."""
