@@ -1,5 +1,6 @@
 """Calibre ebook management module for adding, listing, and converting ebooks."""
 
+import logging
 import os
 import subprocess
 import tempfile
@@ -10,6 +11,9 @@ from dotenv import load_dotenv
 
 # Load environment variables
 load_dotenv()
+
+# Configure logging
+logger = logging.getLogger(__name__)
 
 
 class CalibreManager:
@@ -24,8 +28,20 @@ class CalibreManager:
         self.library_path = library_path or os.getenv("CALIBRE_LIBRARY_PATH", 
                                                       os.path.expanduser("~/Calibre Library"))
         
+        logger.info(f"Initializing CalibreManager with library path: {self.library_path}")
+        
         # Ensure library directory exists
         os.makedirs(self.library_path, exist_ok=True)
+        
+        # Log directory contents for debugging
+        if os.path.exists(self.library_path):
+            try:
+                contents = os.listdir(self.library_path)
+                logger.info(f"Library directory contents: {contents}")
+                logger.info(f"Library directory exists: {os.path.exists(self.library_path)}")
+                logger.info(f"Library directory is readable: {os.access(self.library_path, os.R_OK)}")
+            except Exception as e:
+                logger.error(f"Error listing library directory: {e}")
     
     def add_ebook(self, file_path: str, title: Optional[str] = None, 
                   authors: Optional[str] = None) -> Dict[str, Any]:
@@ -106,6 +122,9 @@ class CalibreManager:
         Returns:
             dict: List of ebooks with metadata
         """
+        logger.info(f"Listing ebooks: search_query='{search_query}', limit={limit}")
+        logger.info(f"Using library path: {self.library_path}")
+        
         try:
             cmd = [
                 "calibredb", "list",
@@ -117,6 +136,8 @@ class CalibreManager:
             if search_query:
                 cmd.extend(["-s", search_query])
             
+            logger.info(f"Executing command: {' '.join(cmd)}")
+            
             result = subprocess.run(
                 cmd,
                 capture_output=True,
@@ -124,31 +145,81 @@ class CalibreManager:
                 check=True
             )
             
+            logger.info(f"Command exit code: {result.returncode}")
+            logger.info(f"Command stdout length: {len(result.stdout)} chars")
+            logger.info(f"Command stdout: {repr(result.stdout[:500])}...")  # First 500 chars
+            if result.stderr:
+                logger.warning(f"Command stderr: {result.stderr}")
+            
             books = []
-            lines = result.stdout.strip().split('\n')
+            raw_output = result.stdout.strip()
+            
+            logger.info(f"Raw output length: {len(raw_output)} chars")
+            
+            # Use a simpler approach: try with --separator to get machine-readable output
+            logger.info("Trying alternative parsing approach...")
+            
+            # Re-run the command with different format for better parsing
+            cmd_alt = [
+                "calibredb", "list",
+                "--library-path", self.library_path,
+                "--fields", "id,title,authors",
+                f"--limit", str(limit),
+                "--separator", "|||"  # Use unique separator
+            ]
+            
+            if search_query:
+                cmd_alt.extend(["-s", search_query])
+            
+            logger.info(f"Executing alternative command: {' '.join(cmd_alt)}")
+            
+            result_alt = subprocess.run(
+                cmd_alt,
+                capture_output=True,
+                text=True,
+                check=True
+            )
+            
+            logger.info(f"Alternative command stdout: {repr(result_alt.stdout[:500])}...")
+            
+            lines = result_alt.stdout.strip().split('\n')
             
             # Skip header line if present
-            if lines and lines[0].startswith('id'):
+            if lines and 'id|||title|||authors' in lines[0]:
                 lines = lines[1:]
+                logger.info(f"Skipped header line, processing {len(lines)} data lines")
             
-            for line in lines:
+            for i, line in enumerate(lines):
                 if not line.strip():
                     continue
                 
-                parts = line.split('\t')
-                if len(parts) >= 6:
+                logger.debug(f"Processing line {i}: {repr(line)}")
+                parts = line.split('|||')
+                logger.debug(f"Line parts count: {len(parts)}, parts: {parts}")
+                
+                if len(parts) >= 3:
                     try:
+                        book_id = int(parts[0].strip())
+                        title = parts[1].strip() if parts[1].strip() else "Unknown Title"
+                        authors = parts[2].strip() if parts[2].strip() else "Unknown Author"
+                        
                         book = {
-                            "id": int(parts[0]),
-                            "title": parts[1] if parts[1] else "Unknown Title",
-                            "authors": parts[2] if parts[2] else "Unknown Author",
-                            "formats": parts[3] if parts[3] else "",
-                            "size": parts[4] if parts[4] else "0",
-                            "timestamp": parts[5] if parts[5] else ""
+                            "id": book_id,
+                            "title": title,
+                            "authors": authors,
+                            "formats": "",  # We'll get this separately if needed
+                            "size": "0",
+                            "timestamp": ""
                         }
                         books.append(book)
-                    except (ValueError, IndexError):
+                        logger.info(f"Added book: {book}")
+                    except (ValueError, IndexError) as e:
+                        logger.warning(f"Failed to parse line {i}: {e}, parts: {parts}")
                         continue
+                else:
+                    logger.warning(f"Line {i} has insufficient parts ({len(parts)}): {parts}")
+            
+            logger.info(f"Final books count: {len(books)}")
             
             return {
                 "success": True,
@@ -158,12 +229,18 @@ class CalibreManager:
             }
             
         except subprocess.CalledProcessError as e:
+            logger.error(f"calibredb command failed: {e}")
+            logger.error(f"Command: {' '.join(cmd)}")
+            logger.error(f"Exit code: {e.returncode}")
+            logger.error(f"Stderr: {e.stderr}")
+            logger.error(f"Stdout: {e.stdout}")
             return {
                 "success": False,
                 "error": f"Failed to list ebooks: {e.stderr}",
                 "books": []
             }
         except Exception as e:
+            logger.error(f"Unexpected error in list_ebooks: {e}")
             return {
                 "success": False,
                 "error": f"Unexpected error: {str(e)}",

@@ -2,6 +2,7 @@
 """MCP server for Calibre ebook management."""
 
 import json
+import logging
 import os
 import sys
 from typing import Any, Dict, List
@@ -18,11 +19,21 @@ from mcp.types import (
 
 import calibre
 
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+)
+logger = logging.getLogger(__name__)
+
 # Initialize MCP server
 server = Server("calibre-ebook")
 
 # Global Calibre manager instance
 calibre_mgr = calibre.calibre_manager
+
+logger.info("MCP Calibre server initialized")
+logger.info(f"Calibre library path: {calibre_mgr.library_path}")
 
 
 @server.list_tools()
@@ -201,7 +212,13 @@ async def call_tool(name: str, arguments: Dict[str, Any]) -> List[TextContent]:
             search_query = arguments.get("search_query")
             limit = arguments.get("limit", 20)
             
+            logger.info(f"MCP list_ebooks called with search_query='{search_query}', limit={limit}")
+            
             result = calibre_mgr.list_ebooks(search_query, limit)
+            
+            logger.info(f"list_ebooks result: success={result['success']}, count={result.get('count', 0)}")
+            if not result['success']:
+                logger.error(f"list_ebooks error: {result.get('error')}")
             
             if result["success"]:
                 if not result["books"]:
