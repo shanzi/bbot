@@ -24,4 +24,7 @@ mcp:
     vlc:
       command: "uv"
       args: ["run", "python", "mcp_vlc_server.py"]
+    calibre:
+      command: "uv"
+      args: ["run", "python", "mcp_calibre_server.py"]
     
