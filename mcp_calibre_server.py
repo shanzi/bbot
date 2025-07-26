@@ -18,6 +18,9 @@ from mcp.types import (
 )
 
 import calibre
+import tempfile
+import shutil
+import utils
 
 # Configure logging
 logging.basicConfig(
@@ -174,6 +177,27 @@ async def list_tools() -> List[Tool]:
                     }
                 },
                 "required": ["query"],
+                "additionalProperties": False
+            }
+        ),
+        Tool(
+            name="send_book_to_kindle",
+            description="Export a book from Calibre library and send it to Kindle",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "book_id": {
+                        "type": "integer",
+                        "description": "Calibre book ID to send to Kindle"
+                    },
+                    "format": {
+                        "type": "string",
+                        "description": "Preferred format for Kindle (mobi, azw3, pdf)",
+                        "enum": ["mobi", "azw3", "pdf"],
+                        "default": "mobi"
+                    }
+                },
+                "required": ["book_id"],
                 "additionalProperties": False
             }
         )
@@ -373,6 +397,83 @@ async def call_tool(name: str, arguments: Dict[str, Any]) -> List[TextContent]:
                 response = f"❌ Search failed: {result['error']}"
             
             return [TextContent(type="text", text=response)]
+        
+        elif name == "send_book_to_kindle":
+            book_id = arguments.get("book_id")
+            format_pref = arguments.get("format", "mobi")
+            
+            if book_id is None:
+                return [TextContent(
+                    type="text",
+                    text="Please provide a book ID to send to Kindle."
+                )]
+            
+            logger.info(f"Sending book ID {book_id} to Kindle in {format_pref} format")
+            
+            try:
+                # Create temporary directory for export
+                with tempfile.TemporaryDirectory() as temp_dir:
+                    # Export the book from Calibre library
+                    export_result = calibre_mgr.export_book(
+                        book_id, temp_dir, [format_pref]
+                    )
+                    
+                    if not export_result["success"]:
+                        return [TextContent(
+                            type="text",
+                            text=f"❌ Failed to export book: {export_result['error']}"
+                        )]
+                    
+                    # Find the exported file
+                    exported_files = export_result["exported_files"]
+                    target_file = None
+                    
+                    for file_path in exported_files:
+                        if file_path.lower().endswith(f'.{format_pref.lower()}'):
+                            target_file = file_path
+                            break
+                    
+                    if not target_file:
+                        # Try any available format
+                        target_file = exported_files[0] if exported_files else None
+                    
+                    if not target_file:
+                        return [TextContent(
+                            type="text",
+                            text=f"❌ No suitable file found for Kindle delivery"
+                        )]
+                    
+                    # Send to Kindle using existing email functionality
+                    try:
+                        utils.send_email_to_kindle(target_file)
+                        
+                        # Get book info for response
+                        book_info = calibre_mgr.get_book_info(book_id)
+                        book_title = "Unknown Book"
+                        if book_info["success"] and "Title" in book_info["metadata"]:
+                            book_title = book_info["metadata"]["Title"]
+                        
+                        response = f"📱 Successfully sent to Kindle!\n"
+                        response += f"📖 Book: {book_title}\n"
+                        response += f"🆔 ID: {book_id}\n"
+                        response += f"📄 Format: {format_pref.upper()}\n"
+                        response += f"✉️ Sent to: {os.getenv('KINDLE_ADDRESS', 'configured Kindle address')}"
+                        
+                        return [TextContent(type="text", text=response)]
+                        
+                    except Exception as e:
+                        logger.error(f"Failed to send email to Kindle: {e}")
+                        return [TextContent(
+                            type="text",
+                            text=f"❌ Failed to send email to Kindle: {str(e)}"
+                        )]
+            
+            except Exception as e:
+                logger.error(f"Error in send_book_to_kindle: {e}")
+                return [TextContent(
+                    type="text",
+                    text=f"❌ Error sending book to Kindle: {str(e)}"
+                )]
         
         else:
             return [TextContent(

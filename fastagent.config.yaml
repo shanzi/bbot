@@ -17,7 +17,7 @@ mcp:
       args: ["-y", "@upstash/context7-mcp"]
     filesystem:
       command: "npx"
-      args: ["-y", "@modelcontextprotocol/server-filesystem", "/home/chase/Codes/chatbot/bbot/data", "/home/chase/Codes/chatbot/bbot/data/document"]
+      args: ["-y", "@modelcontextprotocol/server-filesystem", "/home/chase/Codes/chatbot/bbot/data", "/home/chase/Codes/chatbot/bbot/data/document", "/home/chase/Calibre Library"]
     utils:
       command: "uv"
       args: ["run", "python", "-m", "mcp_server_utils"]
