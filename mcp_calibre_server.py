@@ -410,38 +410,88 @@ async def call_tool(name: str, arguments: Dict[str, Any]) -> List[TextContent]:
             
             logger.info(f"Sending book ID {book_id} to Kindle in {format_pref} format")
             
+            # Kindle-compatible formats
+            kindle_formats = {"mobi", "azw3", "pdf", "epub"}
+            
             try:
                 # Create temporary directory for export
                 with tempfile.TemporaryDirectory() as temp_dir:
-                    # Export the book from Calibre library
+                    # First, try to export the preferred format
                     export_result = calibre_mgr.export_book(
                         book_id, temp_dir, [format_pref]
                     )
                     
-                    if not export_result["success"]:
-                        return [TextContent(
-                            type="text",
-                            text=f"❌ Failed to export book: {export_result['error']}"
-                        )]
-                    
-                    # Find the exported file
-                    exported_files = export_result["exported_files"]
                     target_file = None
+                    actual_format = format_pref
                     
-                    for file_path in exported_files:
-                        if file_path.lower().endswith(f'.{format_pref.lower()}'):
-                            target_file = file_path
-                            break
+                    if export_result["success"]:
+                        # Filter out metadata files (.opf) and only get actual ebook files
+                        ebook_files = [
+                            f for f in export_result["exported_files"] 
+                            if not f.lower().endswith('.opf') and 
+                            any(f.lower().endswith(f'.{fmt}') for fmt in kindle_formats)
+                        ]
+                        
+                        # Look for the preferred format
+                        for file_path in ebook_files:
+                            if file_path.lower().endswith(f'.{format_pref.lower()}'):
+                                target_file = file_path
+                                break
                     
+                    # If preferred format not found, try to export all formats and find a suitable one
                     if not target_file:
-                        # Try any available format
-                        target_file = exported_files[0] if exported_files else None
+                        logger.info(f"Preferred format {format_pref} not found, trying all formats")
+                        export_result = calibre_mgr.export_book(book_id, temp_dir, None)
+                        
+                        if export_result["success"]:
+                            # Filter and prioritize Kindle-compatible formats
+                            ebook_files = [
+                                f for f in export_result["exported_files"] 
+                                if not f.lower().endswith('.opf') and 
+                                any(f.lower().endswith(f'.{fmt}') for fmt in kindle_formats)
+                            ]
+                            
+                            # Priority order for Kindle: mobi > azw3 > epub > pdf
+                            format_priority = ["mobi", "azw3", "epub", "pdf"]
+                            
+                            for fmt in format_priority:
+                                for file_path in ebook_files:
+                                    if file_path.lower().endswith(f'.{fmt}'):
+                                        target_file = file_path
+                                        actual_format = fmt
+                                        break
+                                if target_file:
+                                    break
+                    
+                    # If still no suitable file and we have EPUB, convert it to MOBI
+                    if not target_file:
+                        epub_file = None
+                        for file_path in export_result.get("exported_files", []):
+                            if file_path.lower().endswith('.epub'):
+                                epub_file = file_path
+                                break
+                        
+                        if epub_file and format_pref in ["mobi", "azw3"]:
+                            logger.info(f"Converting EPUB to {format_pref.upper()} for Kindle compatibility")
+                            
+                            conversion_result = calibre_mgr.convert_ebook(
+                                epub_file, format_pref, None
+                            )
+                            
+                            if conversion_result["success"]:
+                                target_file = conversion_result["output_path"]
+                                actual_format = format_pref
+                            else:
+                                logger.error(f"Conversion failed: {conversion_result['error']}")
                     
                     if not target_file:
                         return [TextContent(
                             type="text",
-                            text=f"❌ No suitable file found for Kindle delivery"
+                            text=f"❌ No Kindle-compatible format found for book ID {book_id}. "
+                                 f"Supported formats: {', '.join(kindle_formats)}"
                         )]
+                    
+                    logger.info(f"Sending file to Kindle: {target_file} (format: {actual_format})")
                     
                     # Send to Kindle using existing email functionality
                     try:
@@ -456,8 +506,12 @@ async def call_tool(name: str, arguments: Dict[str, Any]) -> List[TextContent]:
                         response = f"📱 Successfully sent to Kindle!\n"
                         response += f"📖 Book: {book_title}\n"
                         response += f"🆔 ID: {book_id}\n"
-                        response += f"📄 Format: {format_pref.upper()}\n"
+                        response += f"📄 Format: {actual_format.upper()}\n"
                         response += f"✉️ Sent to: {os.getenv('KINDLE_ADDRESS', 'configured Kindle address')}"
+                        
+                        # Add conversion note if format was changed
+                        if actual_format != format_pref:
+                            response += f"\n📝 Note: Converted from available format to {actual_format.upper()}"
                         
                         return [TextContent(type="text", text=response)]
                         
