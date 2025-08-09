@@ -430,9 +430,81 @@ async def _process_agent_response(agent_to_use, message_contents, context, chat_
     # Get only the last text content (final assistant response)
     response_text = response_multipart.last_text()
 
-    # Find all image tags in the response
-    image_tags = re.findall(r'!\[(.*?)\]\((.*?)\)', response_text)
-    logger.info(f"Found {len(image_tags)} image tags in the response.")
+    # Find all image tags in the response with robust parsing that handles parentheses in paths
+    image_tags = []
+    
+    def extract_markdown_images(text):
+        """Extract markdown image syntax with robust handling of parentheses in paths."""
+        results = []
+        i = 0
+        while i < len(text):
+            # Look for ![
+            start = text.find('![', i)
+            if start == -1:
+                break
+            
+            # Find the closing ] for alt text, handling nested brackets
+            alt_start = start + 2
+            bracket_count = 0
+            alt_end = alt_start
+            
+            while alt_end < len(text):
+                char = text[alt_end]
+                if char == '[':
+                    bracket_count += 1
+                elif char == ']':
+                    if bracket_count == 0:
+                        break  # This is our closing bracket
+                    else:
+                        bracket_count -= 1
+                alt_end += 1
+            
+            if alt_end >= len(text):
+                i = start + 2
+                continue
+            
+            # Check if next character is (
+            if alt_end + 1 >= len(text) or text[alt_end + 1] != '(':
+                i = alt_end + 1
+                continue
+            
+            # Extract alt text
+            alt_text = text[alt_start:alt_end]
+            
+            # Now find the matching closing ) for the URL, handling nested parentheses
+            url_start = alt_end + 2
+            paren_count = 1
+            url_end = url_start
+            
+            while url_end < len(text) and paren_count > 0:
+                char = text[url_end]
+                if char == '(':
+                    paren_count += 1
+                elif char == ')':
+                    paren_count -= 1
+                url_end += 1
+            
+            if paren_count == 0:
+                # Found matching closing parenthesis
+                url = text[url_start:url_end - 1]  # -1 to exclude the closing )
+                results.append((alt_text, url))
+                i = url_end
+            else:
+                # No matching closing parenthesis found
+                i = start + 2
+        
+        return results
+    
+    try:
+        image_tags = extract_markdown_images(response_text)
+        logger.info(f"Found {len(image_tags)} image tags using robust parser.")
+    except Exception as e:
+        logger.warning(f"Error in robust image parsing, falling back to regex: {e}")
+        # Fallback to simple regex if the parser fails
+        image_tags = re.findall(r'!\[([^\]]*)\]\(([^)]*)\)', response_text)
+        logger.info(f"Found {len(image_tags)} image tags using fallback regex.")
+    
+    logger.info(f"Final image tags: {image_tags}")
     
     # Find file attachment directives in the response
     # Pattern matches ATTACH_FILE: followed by path until end of line or backtick
