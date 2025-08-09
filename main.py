@@ -8,6 +8,8 @@ import logging
 import os
 import re
 import time
+import unicodedata
+import urllib.parse
 import zoneinfo
 
 from dotenv import load_dotenv
@@ -74,6 +76,115 @@ try:
     LOCAL_TIMEZONE = datetime.datetime.now().astimezone().tzinfo
 except Exception:
     LOCAL_TIMEZONE = "UTC"  # Fallback if timezone detection fails
+
+def normalize_file_path(file_path: str) -> str:
+    """
+    Normalize file path to handle special characters and non-ASCII characters.
+    
+    Args:
+        file_path: Original file path that may contain special characters
+        
+    Returns:
+        str: Normalized file path that exists on the filesystem
+    """
+    try:
+        # URL decode the path in case it contains encoded characters
+        decoded_path = urllib.parse.unquote(file_path)
+        
+        # Normalize Unicode characters (NFC normalization)
+        normalized_path = unicodedata.normalize('NFC', decoded_path)
+        
+        # Convert to absolute path if needed
+        if not os.path.isabs(normalized_path):
+            if normalized_path.startswith('data/'):
+                normalized_path = os.path.join(os.getcwd(), normalized_path)
+            else:
+                normalized_path = utils.get_save_directory(normalized_path)
+        
+        # Normalize the path separators for the current OS
+        normalized_path = os.path.normpath(normalized_path)
+        
+        logger.debug(f"Path normalization: '{file_path}' -> '{normalized_path}'")
+        return normalized_path
+        
+    except Exception as e:
+        logger.warning(f"Error normalizing path '{file_path}': {e}")
+        return file_path
+
+def find_image_file(file_path: str) -> str:
+    """
+    Find an image file with robust path resolution and fallback strategies.
+    
+    Args:
+        file_path: Original file path from markdown
+        
+    Returns:
+        str: Actual file path that exists, or empty string if not found
+    """
+    # Try the normalized path first
+    normalized_path = normalize_file_path(file_path)
+    
+    if os.path.exists(normalized_path):
+        logger.info(f"Found image at normalized path: {normalized_path}")
+        return normalized_path
+    
+    # Fallback strategies for common issues
+    fallback_paths = []
+    
+    # Try without URL encoding
+    if '%' in file_path:
+        try:
+            decoded = urllib.parse.unquote(file_path)
+            fallback_paths.append(normalize_file_path(decoded))
+        except:
+            pass
+    
+    # Try different Unicode normalizations
+    for norm_form in ['NFD', 'NFKC', 'NFKD']:
+        try:
+            norm_path = unicodedata.normalize(norm_form, file_path)
+            fallback_paths.append(normalize_file_path(norm_path))
+        except:
+            pass
+    
+    # Try common variations if path contains data/
+    if 'data/' in file_path:
+        base_path = file_path.split('data/', 1)[1] if 'data/' in file_path else file_path
+        fallback_paths.extend([
+            os.path.join(os.getcwd(), 'data', base_path),
+            os.path.join(os.getcwd(), base_path)
+        ])
+    
+    # Test all fallback paths
+    for candidate_path in fallback_paths:
+        if candidate_path and os.path.exists(candidate_path):
+            logger.info(f"Found image at fallback path: {candidate_path} (original: {file_path})")
+            return candidate_path
+    
+    # If still not found, try glob pattern matching for similar names
+    try:
+        import glob
+        dir_path = os.path.dirname(normalized_path)
+        base_name = os.path.basename(normalized_path)
+        
+        if os.path.isdir(dir_path):
+            # Remove extension and try pattern matching
+            name_without_ext = os.path.splitext(base_name)[0]
+            pattern = os.path.join(dir_path, f"{name_without_ext}*")
+            matches = glob.glob(pattern)
+            
+            if matches:
+                # Prefer exact matches, then image files
+                image_extensions = {'.jpg', '.jpeg', '.png', '.gif', '.webp'}
+                for match in sorted(matches):
+                    if os.path.splitext(match)[1].lower() in image_extensions:
+                        logger.info(f"Found image via pattern matching: {match} (original: {file_path})")
+                        return match
+    except Exception as e:
+        logger.debug(f"Pattern matching failed for {file_path}: {e}")
+    
+    logger.warning(f"Image not found after all attempts: {file_path}")
+    return ""
 
 def downscale_image(image_path: str, max_size: tuple = (512, 512), quality: int = 60) -> bytes:
     """Downscale image to minimal size for token efficiency while maintaining readability.
@@ -338,19 +449,24 @@ async def _process_agent_response(agent_to_use, message_contents, context, chat_
     
     media_group = []
     for alt_text, file_path in image_tags:
-        if not os.path.isabs(file_path):
-            if file_path.startswith('data/'):
-                file_path = os.path.join(os.getcwd(), file_path)
-            else:
-                file_path = utils.get_save_directory(file_path)
+        logger.info(f"Processing image tag: alt='{alt_text}', path='{file_path}'")
         
-        if os.path.exists(file_path):
-            logger.info(f"Found image at {file_path}")
-            media_group.append(
-                InputMediaPhoto(media=open(file_path, 'rb'), caption=alt_text)
-            )
+        # Use robust file path resolution
+        resolved_path = find_image_file(file_path)
+        
+        if resolved_path:
+            try:
+                with open(resolved_path, 'rb') as image_file:
+                    # Read the file content into memory to avoid file handle leaks
+                    image_content = image_file.read()
+                    media_group.append(
+                        InputMediaPhoto(media=io.BytesIO(image_content), caption=alt_text)
+                    )
+                logger.info(f"Successfully loaded image: {resolved_path}")
+            except Exception as e:
+                logger.error(f"Failed to read image file {resolved_path}: {e}")
         else:
-            logger.warning(f"Image not found at {file_path}")
+            logger.warning(f"Could not resolve image path: '{file_path}'")
 
     telegram_response = markdownify(clean_response_text)
     await context.bot.edit_message_text(
