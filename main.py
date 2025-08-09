@@ -56,8 +56,11 @@ if not TELEGRAM_BOT_TOKEN:
 SUPPORTED_MODELS = {
     "claude-sonnet-3": "anthropic.claude-3-5-sonnet-20241022",
     "claude-sonnet-3.7": "anthropic.claude-3-7-sonnet-20250219",
-    "openai-mini": "openai.gpt-4o-mini",
     "claude-sonnet-4": "anthropic.claude-sonnet-4-20250514",
+    "openai-mini": "openai.gpt-4o-mini",
+    "gpt-5": "openai.gpt-5",
+    "gpt-5-mini": "openai.gpt-5-mini",
+    "gpt-5-nano": "openai.gpt-5-nano",
     "gemini-pro": "google.gemini-2.5-pro",
     "gemini-flash": "google.gemini-2.5-flash",
 }

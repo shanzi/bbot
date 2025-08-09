@@ -10,7 +10,7 @@ This project implements a sophisticated Telegram bot that integrates with `fast-
 ## Features
 
 ### 🤖 **Multi-Agent AI Support**
-*   **6 AI Models Available:** Claude Sonnet 3/3.7/4, OpenAI GPT-4o-mini/o3, Gemini 2.5 Pro/Flash
+*   **8 AI Models Available:** Claude Sonnet 3/3.7/4, OpenAI GPT-4o-mini/GPT-5/GPT-5-mini/GPT-5-nano, Gemini 2.5 Pro/Flash
 *   **Dynamic Model Switching:** Change AI agents mid-conversation with inline keyboard
 *   **Per-Chat Agent Memory:** Each chat maintains its own agent instance and conversation history
 *   **Context Management:** Built-in context trimming and token estimation
