@@ -111,13 +111,13 @@ def normalize_file_path(file_path: str) -> str:
         logger.warning(f"Error normalizing path '{file_path}': {e}")
         return file_path
 
-def split_long_message(text: str, max_length: int = 4000) -> list[str]:
+def split_long_message(text: str, max_length: int = 2000) -> list[str]:
     """
     Split a long message into chunks that fit within Telegram's message length limit.
     
     Args:
         text: The message text to split
-        max_length: Maximum length per chunk (default 4000 to leave room for formatting)
+        max_length: Maximum length per chunk (default 2000 for safety margin)
         
     Returns:
         list[str]: List of message chunks
@@ -155,7 +155,7 @@ def split_long_message(text: str, max_length: int = 4000) -> list[str]:
         for break_point in break_points:
             # Find the last occurrence of this break point
             last_break = chunk_text.rfind(break_point)
-            if last_break > len(chunk_text) * 0.5:  # Only use if it's not too early
+            if last_break > len(chunk_text) * 0.3:  # More lenient threshold for smaller chunks
                 best_break = last_break + len(break_point)
                 break
         
