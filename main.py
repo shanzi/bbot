@@ -111,6 +111,158 @@ def normalize_file_path(file_path: str) -> str:
         logger.warning(f"Error normalizing path '{file_path}': {e}")
         return file_path
 
+def split_long_message(text: str, max_length: int = 4000) -> list[str]:
+    """
+    Split a long message into chunks that fit within Telegram's message length limit.
+    
+    Args:
+        text: The message text to split
+        max_length: Maximum length per chunk (default 4000 to leave room for formatting)
+        
+    Returns:
+        list[str]: List of message chunks
+    """
+    if len(text) <= max_length:
+        return [text]
+    
+    chunks = []
+    current_pos = 0
+    
+    while current_pos < len(text):
+        # Calculate the end position for this chunk
+        end_pos = current_pos + max_length
+        
+        if end_pos >= len(text):
+            # Last chunk
+            chunks.append(text[current_pos:])
+            break
+        
+        # Try to find a good breaking point (avoid cutting words/sentences)
+        chunk_text = text[current_pos:end_pos]
+        
+        # Look for good break points in order of preference
+        break_points = [
+            '\n\n',  # Paragraph break
+            '\n',    # Line break
+            '. ',    # Sentence end
+            '! ',    # Exclamation
+            '? ',    # Question
+            ', ',    # Comma
+            ' ',     # Word boundary
+        ]
+        
+        best_break = -1
+        for break_point in break_points:
+            # Find the last occurrence of this break point
+            last_break = chunk_text.rfind(break_point)
+            if last_break > len(chunk_text) * 0.5:  # Only use if it's not too early
+                best_break = last_break + len(break_point)
+                break
+        
+        if best_break > 0:
+            # Use the good break point
+            chunks.append(text[current_pos:current_pos + best_break].rstrip())
+            current_pos += best_break
+        else:
+            # No good break point found, just cut at max_length
+            chunks.append(text[current_pos:end_pos])
+            current_pos = end_pos
+    
+    return [chunk for chunk in chunks if chunk.strip()]  # Remove empty chunks
+
+async def send_long_message(context, chat_id: int, message_id: int, text: str, parse_mode=None, edit_first: bool = True):
+    """
+    Send a potentially long message, splitting it into multiple messages if needed.
+    
+    Args:
+        context: Telegram context
+        chat_id: Chat ID
+        message_id: Message ID to edit (for first chunk if edit_first=True)
+        text: Message text
+        parse_mode: Parse mode for Telegram
+        edit_first: Whether to edit the first message or send all as new messages
+    """
+    if not text.strip():
+        if edit_first:
+            await context.bot.edit_message_text(
+                chat_id=chat_id,
+                message_id=message_id,
+                text="(Empty response)"
+            )
+        return
+    
+    # Split the message if it's too long
+    chunks = split_long_message(text)
+    
+    if len(chunks) == 1:
+        # Single chunk, just send/edit normally
+        try:
+            if edit_first:
+                await context.bot.edit_message_text(
+                    chat_id=chat_id,
+                    message_id=message_id,
+                    text=chunks[0],
+                    parse_mode=parse_mode
+                )
+            else:
+                await context.bot.send_message(
+                    chat_id=chat_id,
+                    text=chunks[0],
+                    parse_mode=parse_mode
+                )
+        except Exception as e:
+            # If formatting fails, try without parse_mode
+            logger.warning(f"Failed to send formatted message, trying plain text: {e}")
+            if edit_first:
+                await context.bot.edit_message_text(
+                    chat_id=chat_id,
+                    message_id=message_id,
+                    text=chunks[0]
+                )
+            else:
+                await context.bot.send_message(
+                    chat_id=chat_id,
+                    text=chunks[0]
+                )
+    else:
+        # Multiple chunks needed
+        logger.info(f"Message too long ({len(text)} chars), splitting into {len(chunks)} chunks")
+        
+        for i, chunk in enumerate(chunks):
+            try:
+                if i == 0 and edit_first:
+                    # Edit the original message with the first chunk
+                    chunk_with_indicator = f"📝 **Part {i+1}/{len(chunks)}**\n\n{chunk}"
+                    await context.bot.edit_message_text(
+                        chat_id=chat_id,
+                        message_id=message_id,
+                        text=chunk_with_indicator,
+                        parse_mode=parse_mode
+                    )
+                else:
+                    # Send additional chunks as new messages
+                    chunk_with_indicator = f"📝 **Part {i+1}/{len(chunks)}**\n\n{chunk}"
+                    await context.bot.send_message(
+                        chat_id=chat_id,
+                        text=chunk_with_indicator,
+                        parse_mode=parse_mode
+                    )
+            except Exception as e:
+                # If formatting fails, try without parse_mode
+                logger.warning(f"Failed to send formatted chunk {i+1}, trying plain text: {e}")
+                chunk_plain = f"Part {i+1}/{len(chunks)}\n\n{chunk}"
+                if i == 0 and edit_first:
+                    await context.bot.edit_message_text(
+                        chat_id=chat_id,
+                        message_id=message_id,
+                        text=chunk_plain
+                    )
+                else:
+                    await context.bot.send_message(
+                        chat_id=chat_id,
+                        text=chunk_plain
+                    )
+
 def find_image_file(file_path: str) -> str:
     """
     Find an image file with robust path resolution and fallback strategies.
@@ -541,10 +693,13 @@ async def _process_agent_response(agent_to_use, message_contents, context, chat_
             logger.warning(f"Could not resolve image path: '{file_path}'")
 
     telegram_response = markdownify(clean_response_text)
-    await context.bot.edit_message_text(
-        chat_id=chat_id,
-        message_id=message_id,
-        text=telegram_response,
+    
+    # Use robust message sending that handles length limits
+    await send_long_message(
+        context, 
+        chat_id, 
+        message_id, 
+        telegram_response, 
         parse_mode=ParseMode.MARKDOWN_V2
     )
     
@@ -631,10 +786,13 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         agent_alias = current_agents.get(chat_id, "claude-opus-4.1")
         logger.error(f"Error communicating with {agent_alias} agent: {e}")
         error_message = f"Sorry, I encountered an error with the {agent_alias} agent: {e}"
-        await context.bot.edit_message_text(
-            chat_id=chat_id,
-            message_id=placeholder_message.message_id,
-            text=error_message
+        
+        # Use robust message sending for error messages too
+        await send_long_message(
+            context,
+            chat_id,
+            placeholder_message.message_id,
+            error_message
         )
 
 async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
