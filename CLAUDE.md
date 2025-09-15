@@ -66,9 +66,9 @@ The bot uses multiple MCP servers configured in `fastagent.config.yaml`:
 
 ### Agent Models
 
-Supported models defined in `SUPPORTED_MODELS`:
+Supported models defined in `SUPPORTED_MODELS` (gpt-5 is default):
+- OpenAI: gpt-5 (default), gpt-5-mini, gpt-5-nano, gpt-4o-mini
 - Claude: sonnet-3.7, sonnet-4, opus-4.1
-- OpenAI: gpt-4o-mini, gpt-5, gpt-5-mini, gpt-5-nano
 - Gemini: 2.5-pro, 2.5-flash
 
 ### Data Structure

@@ -56,13 +56,13 @@ if not TELEGRAM_BOT_TOKEN:
     raise ValueError("TELEGRAM_BOT_TOKEN not found in .env file or environment variables.")
 
 SUPPORTED_MODELS = {
+    "gpt-5": "openai.gpt-5",
+    "gpt-5-mini": "openai.gpt-5-mini",
+    "gpt-5-nano": "openai.gpt-5-nano",
     "claude-sonnet-3.7": "anthropic.claude-3-7-sonnet-20250219",
     "claude-sonnet-4": "anthropic.claude-sonnet-4-20250514",
     "claude-opus-4.1": "anthropic.claude-opus-4-1-20250805",
     "openai-mini": "openai.gpt-4o-mini",
-    "gpt-5": "openai.gpt-5",
-    "gpt-5-mini": "openai.gpt-5-mini",
-    "gpt-5-nano": "openai.gpt-5-nano",
     "gemini-pro": "google.gemini-2.5-pro",
     "gemini-flash": "google.gemini-2.5-flash",
 }
@@ -401,7 +401,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 async def status_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Show the currently active agent for the chat."""
     chat_id = update.effective_chat.id
-    agent_alias = current_agents.get(chat_id, "claude-opus-4.1")
+    agent_alias = current_agents.get(chat_id, "gpt-5")
     agent_instance = agent_instances.get(chat_id)
 
     status_text = f"Your current agent is: **{agent_alias.capitalize()}**\n"
@@ -522,7 +522,7 @@ async def _handle_photo_upload(update, context, chat_id, message_id):
 
 async def _get_or_create_agent(chat_id, context, message_id):
     """Get existing agent or create new one if needed."""
-    agent_alias = current_agents.get(chat_id, "claude-opus-4.1")
+    agent_alias = current_agents.get(chat_id, "gpt-5")
     agent_to_use = agent_instances.get(chat_id)
 
     if not agent_to_use:
@@ -783,7 +783,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         )
 
     except Exception as e:
-        agent_alias = current_agents.get(chat_id, "claude-opus-4.1")
+        agent_alias = current_agents.get(chat_id, "gpt-5")
         logger.error(f"Error communicating with {agent_alias} agent: {e}")
         error_message = f"Sorry, I encountered an error with the {agent_alias} agent: {e}"
         
