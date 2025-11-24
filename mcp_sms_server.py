@@ -1,6 +1,5 @@
 """MCP server providing SMS query tools via ADB for connected Android devices."""
 
-import json
 import subprocess
 from typing import Optional
 
@@ -12,51 +11,70 @@ fast_mcp = FastMCP("mcp-server-sms")
 
 @fast_mcp.tool()
 def query_sms(
-    projection: Optional[str] = None,
-    where: Optional[str] = None,
-    sort: Optional[str] = None,
-    user_id: Optional[str] = None,
+    address: Optional[str] = None,
+    read: Optional[bool] = None,
+    date_from: Optional[int] = None,
+    date_to: Optional[int] = None,
+    sort_order: str = "DESC",
     limit: int = 100
-) -> str:
+) -> dict:
     """Query SMS messages from a connected Android device via ADB.
 
     Args:
-        projection: Colon-separated list of column names to retrieve (e.g., "address:body:date")
-                   Common columns: _id, address, person, date, date_sent, protocol, read,
-                   status, type, body, service_center, locked, error_code, seen, thread_id
-        where: SQL WHERE clause to filter results (e.g., "type=1 AND read=0")
-               Common filters: type (1=inbox, 2=sent), read (0=unread, 1=read),
-               address (phone number), date (timestamp in milliseconds)
-        sort: Sort order for results (e.g., "date DESC", "address ASC")
-        user_id: Android user ID to query (optional)
+        address: Filter by phone number (e.g., "+1234567890")
+        read: Filter by read status (True=read, False=unread, None=all)
+        date_from: Filter messages from this timestamp onwards (milliseconds since epoch)
+        date_to: Filter messages up to this timestamp (milliseconds since epoch)
+        sort_order: Sort by date, either "DESC" (newest first) or "ASC" (oldest first)
         limit: Maximum number of results to return (default: 100)
 
     Returns:
-        str: Query results in JSON format or error message
+        dict: Query results with status, count, messages, and command
 
     Examples:
         - Get recent unread messages:
-          query_sms(projection="address:body:date", where="read=0", sort="date DESC")
-        - Get all sent messages:
-          query_sms(where="type=2", sort="date DESC")
+          query_sms(read=False, sort_order="DESC")
         - Get messages from specific number:
-          query_sms(where="address='+1234567890'")
+          query_sms(address="+1234567890")
+        - Get messages in date range:
+          query_sms(date_from=1234567890000, date_to=1234567900000)
     """
     try:
         # Build the ADB command
         command = ["adb", "shell", "content", "query", "--uri", "content://sms/"]
 
-        if user_id:
-            command.extend(["--user", user_id])
+        # Always use a fixed projection for consistency
+        projection = "address:body:date:type:read:thread_id"
+        command.extend(["--projection", projection])
 
-        if projection:
-            command.extend(["--projection", projection])
+        # Build WHERE clause from filters
+        where_clauses = []
 
-        if where:
-            command.extend(["--where", where])
+        if address is not None:
+            where_clauses.append(f"address='{address}'")
 
-        if sort:
-            command.extend(["--sort", sort])
+        if read is not None:
+            read_value = "1" if read else "0"
+            where_clauses.append(f"read={read_value}")
+
+        if date_from is not None:
+            where_clauses.append(f"date>={date_from}")
+
+        if date_to is not None:
+            where_clauses.append(f"date<={date_to}")
+
+        if where_clauses:
+            where_clause = " AND ".join(where_clauses)
+            # Escape spaces for ADB shell
+            where_clause = where_clause.replace(" ", "\\ ")
+            command.extend(["--where", where_clause])
+
+        # Add sort order (always by date)
+        # Escape spaces for ADB shell command parsing
+        if sort_order.upper() not in ["ASC", "DESC"]:
+            sort_order = "DESC"
+        sort_clause = f"date\\ {sort_order.upper()}"
+        command.extend(["--sort", sort_clause])
 
         # Execute the command
         result = subprocess.run(
@@ -64,18 +82,28 @@ def query_sms(
             capture_output=True,
             text=True,
             timeout=30,
-            check=True
+            check=False  # Don't raise exception, handle errors manually
         )
+
+        # Check for errors
+        if result.returncode != 0:
+            error_msg = result.stderr.strip() if result.stderr else f"Command exited with code {result.returncode}"
+            return {
+                "status": "error",
+                "error": f"ADB command failed: {error_msg}",
+                "return_code": result.returncode,
+                "hint": "Make sure an Android device is connected via ADB and USB debugging is enabled"
+            }
 
         output = result.stdout.strip()
 
         if not output:
-            return json.dumps({
+            return {
                 "status": "success",
                 "count": 0,
                 "messages": [],
                 "info": "No messages found matching the criteria"
-            }, indent=2)
+            }
 
         # Parse the output
         # ADB content query returns rows in format: Row: 0 col1=value1, col2=value2, ...
@@ -102,44 +130,37 @@ def query_sms(
                 if len(messages) >= limit:
                     break
 
-        return json.dumps({
+        return {
             "status": "success",
             "count": len(messages),
             "messages": messages,
             "command": " ".join(command)
-        }, indent=2)
+        }
 
     except subprocess.TimeoutExpired:
-        return json.dumps({
+        return {
             "status": "error",
             "error": "Command timed out after 30 seconds"
-        }, indent=2)
-    except subprocess.CalledProcessError as e:
-        error_msg = e.stderr.strip() if e.stderr else str(e)
-        return json.dumps({
-            "status": "error",
-            "error": f"ADB command failed: {error_msg}",
-            "hint": "Make sure an Android device is connected via ADB and USB debugging is enabled"
-        }, indent=2)
+        }
     except FileNotFoundError:
-        return json.dumps({
+        return {
             "status": "error",
             "error": "ADB command not found",
             "hint": "Please ensure Android Debug Bridge (adb) is installed and in your system's PATH"
-        }, indent=2)
+        }
     except Exception as e:
-        return json.dumps({
+        return {
             "status": "error",
             "error": f"An unexpected error occurred: {str(e)}"
-        }, indent=2)
+        }
 
 
 @fast_mcp.tool()
-def check_adb_connection() -> str:
+def check_adb_connection() -> dict:
     """Check if an Android device is connected via ADB.
 
     Returns:
-        str: Connection status and device information in JSON format
+        dict: Connection status and device information
     """
     try:
         result = subprocess.run(
@@ -147,8 +168,17 @@ def check_adb_connection() -> str:
             capture_output=True,
             text=True,
             timeout=10,
-            check=True
+            check=False
         )
+
+        # Check for errors
+        if result.returncode != 0:
+            error_msg = result.stderr.strip() if result.stderr else f"Command exited with code {result.returncode}"
+            return {
+                "status": "error",
+                "error": f"ADB devices command failed: {error_msg}",
+                "return_code": result.returncode
+            }
 
         lines = result.stdout.strip().split('\n')
         devices = []
@@ -163,32 +193,32 @@ def check_adb_connection() -> str:
                         "status": parts[1]
                     })
 
-        return json.dumps({
+        return {
             "status": "success",
             "connected": len(devices) > 0,
             "device_count": len(devices),
             "devices": devices
-        }, indent=2)
+        }
 
     except FileNotFoundError:
-        return json.dumps({
+        return {
             "status": "error",
             "error": "ADB command not found",
             "hint": "Please ensure Android Debug Bridge (adb) is installed and in your system's PATH"
-        }, indent=2)
+        }
     except Exception as e:
-        return json.dumps({
+        return {
             "status": "error",
             "error": f"Failed to check ADB connection: {str(e)}"
-        }, indent=2)
+        }
 
 
 @fast_mcp.tool()
-def query_sms_threads() -> str:
+def query_sms_threads() -> dict:
     """Query SMS conversation threads from a connected Android device.
 
     Returns:
-        str: List of SMS threads in JSON format
+        dict: List of SMS threads with status, count, and thread data
     """
     try:
         command = [
@@ -202,17 +232,26 @@ def query_sms_threads() -> str:
             capture_output=True,
             text=True,
             timeout=30,
-            check=True
+            check=False
         )
+
+        # Check for errors
+        if result.returncode != 0:
+            error_msg = result.stderr.strip() if result.stderr else f"Command exited with code {result.returncode}"
+            return {
+                "status": "error",
+                "error": f"ADB command failed: {error_msg}",
+                "return_code": result.returncode
+            }
 
         output = result.stdout.strip()
 
         if not output:
-            return json.dumps({
+            return {
                 "status": "success",
                 "count": 0,
                 "threads": []
-            }, indent=2)
+            }
 
         threads = []
         lines = output.split('\n')
@@ -230,66 +269,126 @@ def query_sms_threads() -> str:
                 if thread:
                     threads.append(thread)
 
-        return json.dumps({
+        return {
             "status": "success",
             "count": len(threads),
             "threads": threads
-        }, indent=2)
+        }
 
+    except subprocess.TimeoutExpired:
+        return {
+            "status": "error",
+            "error": "Command timed out after 30 seconds"
+        }
     except Exception as e:
-        return json.dumps({
+        return {
             "status": "error",
             "error": f"Failed to query SMS threads: {str(e)}"
-        }, indent=2)
+        }
 
 
 @fast_mcp.tool()
-def get_sms_by_thread(thread_id: str, limit: int = 50) -> str:
+def get_sms_by_thread(thread_id: str, sort_order: str = "DESC", limit: int = 50) -> dict:
     """Get all SMS messages in a specific conversation thread.
 
     Args:
         thread_id: The thread ID to query
+        sort_order: Sort by date, either "DESC" (newest first) or "ASC" (oldest first)
         limit: Maximum number of messages to return (default: 50)
 
     Returns:
-        str: Messages in the thread in JSON format
+        dict: Messages in the thread with status, count, and message data
     """
     try:
-        return query_sms(
-            projection="address:body:date:type:read",
-            where=f"thread_id={thread_id}",
-            sort="date DESC",
-            limit=limit
+        # Build the ADB command with thread_id filter
+        # Escape spaces for ADB shell command parsing
+        sort_clause = f"date\\ {sort_order.upper()}"
+        command = [
+            "adb", "shell", "content", "query",
+            "--uri", "content://sms/",
+            "--projection", "address:body:date:type:read:thread_id",
+            "--where", f"thread_id={thread_id}",
+            "--sort", sort_clause
+        ]
+
+        result = subprocess.run(
+            command,
+            capture_output=True,
+            text=True,
+            timeout=30,
+            check=False
         )
+
+        # Check for errors
+        if result.returncode != 0:
+            error_msg = result.stderr.strip() if result.stderr else f"Command exited with code {result.returncode}"
+            return {
+                "status": "error",
+                "error": f"ADB command failed: {error_msg}",
+                "return_code": result.returncode,
+                "thread_id": thread_id
+            }
+
+        output = result.stdout.strip()
+
+        if not output:
+            return {
+                "status": "success",
+                "count": 0,
+                "messages": [],
+                "thread_id": thread_id
+            }
+
+        messages = []
+        lines = output.split('\n')
+
+        for line in lines:
+            if line.startswith('Row:'):
+                row_data = line.split(' ', 2)[2] if len(line.split(' ', 2)) > 2 else ""
+                message = {}
+                parts = row_data.split(', ')
+                for part in parts:
+                    if '=' in part:
+                        key, value = part.split('=', 1)
+                        message[key] = value
+
+                if message:
+                    messages.append(message)
+
+                if len(messages) >= limit:
+                    break
+
+        return {
+            "status": "success",
+            "count": len(messages),
+            "messages": messages,
+            "thread_id": thread_id
+        }
+
+    except subprocess.TimeoutExpired:
+        return {
+            "status": "error",
+            "error": "Command timed out after 30 seconds",
+            "thread_id": thread_id
+        }
     except Exception as e:
-        return json.dumps({
+        return {
             "status": "error",
             "error": f"Failed to get messages for thread {thread_id}: {str(e)}"
-        }, indent=2)
+        }
 
 
 @fast_mcp.tool()
-def get_unread_sms(limit: int = 20) -> str:
-    """Get all unread SMS messages.
+def get_unread_sms(limit: int = 20) -> dict:
+    """Get all unread SMS messages sorted by date (newest first).
 
     Args:
         limit: Maximum number of messages to return (default: 20)
 
     Returns:
-        str: Unread messages in JSON format
+        dict: Unread messages with status, count, and message data
     """
-    try:
-        return query_sms(
-            projection="address:body:date:thread_id",
-            where="read=0",
-            sort="date DESC",
-            limit=limit
-        )
-    except Exception as e:
-        return json.dumps({
-            "status": "error",
-            "error": f"Failed to get unread messages: {str(e)}"
-        }, indent=2)
+    return query_sms(read=False, sort_order="DESC", limit=limit)
 
 
 def main() -> None:
