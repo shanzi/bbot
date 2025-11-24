@@ -27,7 +27,7 @@ def get_fast_agent_app(model_name: str):
     @fast.agent(
         instruction=_get_agent_instruction(),
         model=model_name,
-        servers=["weather", "utils", "time", "calculator", "fetch", "context7", "filesystem", "vlc", "calibre"],
+        servers=["utils", "time", "calculator", "fetch", "filesystem", "calibre", "sms"],
     )
     async def main_agent():
         """Main agent function - controlled externally."""
@@ -76,15 +76,15 @@ def _get_agent_instruction() -> str:
         "Always use the full absolute path to the file. The message handler will parse this and send the actual file to the user via Telegram. "
         "Do NOT use this for images - images should still use the Markdown syntax above. Only use ATTACH_FILE for documents that users want to download or receive directly. "
         "\n\n"
-        "You can also get weather information, get the current date and time, perform arithmetic calculations, and manage files. "
-        "\n\n**VLC CHROMECAST CONTROL:** You have access to VLC Chromecast functionality through the `vlc` server. You can: "
-        "- List movies in the media library using `list_movies` "
-        "- Search for specific movies using `find_movies` with a query "
-        "- Start casting movies to Chromecast using `start_casting` with the movie file path "
-        "- Control playback with `control_playback` (play, pause, stop, seek, volume) "
-        "- Check VLC status using `get_vlc_status` "
-        "- Stop casting using `stop_casting` "
-        "The Chromecast IP is configured via CHROMECAST_IP environment variable (defaults to 192.168.0.203). When users ask to watch movies, help them find and cast content. "
+        "You can also get the current date and time, perform arithmetic calculations, and manage files. "
+        "\n\n**SMS MANAGEMENT:** You have access to SMS messages from a connected Android device through the `sms` server. You can: "
+        "- Query SMS messages using `query_sms` with filtering and sorting (supports projection, where, sort parameters) "
+        "- Check ADB device connection status using `check_adb_connection` "
+        "- List conversation threads using `query_sms_threads` "
+        "- Get messages in a specific thread using `get_sms_by_thread` with thread_id "
+        "- Get unread messages using `get_unread_sms` "
+        "Common SMS columns: address (phone number), body (message content), date (timestamp), type (1=inbox, 2=sent), read (0=unread, 1=read), thread_id. "
+        "When users ask about messages, texts, or SMS, use these tools to query and retrieve information from their connected Android device. "
         "\n\n**CALIBRE EBOOK MANAGEMENT:** You have access to Calibre ebook management through the `calibre` server. You can: "
         "- Add ebooks to the library using `add_ebook` with file path and optional title/authors "
         "- List ebooks in the library using `list_ebooks` with optional search queries "

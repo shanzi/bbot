@@ -209,30 +209,139 @@ def send_email(to_address: str, subject: str, body: str, attachment_path: str = 
     except Exception as e:
         raise ValueError(f"An unexpected error occurred during email sending: {e}") from e
 
-def webpage_to_pdf(url: str, output_path: str) -> None:
-    """Convert a webpage to PDF using wkhtmltopdf.
+def webpage_to_pdf(url: str, output_path: str, timeout: int = 60) -> None:
+    """Convert a webpage to PDF using wkhtmltopdf with timeout and fallback strategies.
     
     Args:
         url: The URL of the webpage to convert
         output_path: The path where the PDF should be saved
+        timeout: Maximum time in seconds to wait for conversion (default: 60)
         
     Raises:
-        Exception: If conversion fails
+        Exception: If conversion fails completely
     """
+    import signal
+    import logging
+    
+    logger = logging.getLogger(__name__)
     tmp_output = tempfile.mktemp('temp.pdf')
+    
+    # Build command with optimization options for better reliability
+    base_cmd = [
+        "wkhtmltopdf",
+        "--load-error-handling", "ignore",  # Continue on load errors
+        "--load-media-error-handling", "ignore",  # Continue on media errors  
+        "--disable-javascript",  # Reduce hanging risk from JS
+        "--no-stop-slow-scripts",  # Don't wait for slow scripts
+        "--javascript-delay", "1000",  # Wait max 1s for JS
+        "--page-size", "A4",
+        "--margin-top", "0.75in",
+        "--margin-right", "0.75in", 
+        "--margin-bottom", "0.75in",
+        "--margin-left", "0.75in",
+        "--encoding", "UTF-8",
+        url,
+        tmp_output
+    ]
+    
+    # Try with optimized settings first
+    logger.info(f"Converting webpage to PDF: {url} (timeout: {timeout}s)")
+    
     try:
-        subprocess.run(
-            ["wkhtmltopdf", url, tmp_output],
-            check=True
+        # First attempt: Optimized command with timeout
+        result = subprocess.run(
+            base_cmd,
+            timeout=timeout,
+            capture_output=True,
+            text=True,
+            check=False  # Don't raise on non-zero exit
         )
-    except subprocess.CalledProcessError as e:
-        if not os.path.exists(tmp_output):
-            raise Exception(f"Error converting to PDF with wkhtmltopdf: {e.stderr}") from e
-    except Exception as e:
-        raise Exception(f"An unexpected error occurred: {e}") from e
-    finally:
-        if os.path.exists(tmp_output):
+        
+        if result.returncode == 0 and os.path.exists(tmp_output) and os.path.getsize(tmp_output) > 1000:
+            # Success with good file size
+            logger.info(f"PDF conversion successful: {os.path.getsize(tmp_output)} bytes")
             os.rename(tmp_output, output_path)
+            return
+        
+        # Log the error but try fallback
+        logger.warning(f"First attempt failed (exit code: {result.returncode}): {result.stderr}")
+        
+    except subprocess.TimeoutExpired:
+        logger.warning(f"PDF conversion timed out after {timeout}s, trying fallback...")
+        # Kill any remaining processes
+        try:
+            subprocess.run(["pkill", "-f", "wkhtmltopdf"], capture_output=True)
+        except:
+            pass
+    
+    except Exception as e:
+        logger.warning(f"First attempt failed with exception: {e}")
+    
+    # Fallback attempt: More aggressive settings with shorter timeout
+    fallback_cmd = [
+        "wkhtmltopdf", 
+        "--disable-javascript",
+        "--load-error-handling", "ignore",
+        "--load-media-error-handling", "ignore",
+        "--disable-plugins",
+        "--disable-images",  # Skip images for faster loading
+        "--no-background",   # Skip background images/colors
+        "--grayscale",       # Reduce processing
+        "--lowquality",      # Reduce quality for speed
+        "--page-size", "A4",
+        "--javascript-delay", "500",  # Shorter JS delay
+        url,
+        tmp_output
+    ]
+    
+    logger.info("Trying fallback conversion with simplified settings...")
+    
+    try:
+        result = subprocess.run(
+            fallback_cmd,
+            timeout=min(30, timeout // 2),  # Half the timeout for fallback
+            capture_output=True,
+            text=True,
+            check=False
+        )
+        
+        if result.returncode == 0 and os.path.exists(tmp_output):
+            file_size = os.path.getsize(tmp_output)
+            if file_size > 500:  # Lower threshold for fallback
+                logger.info(f"Fallback PDF conversion successful: {file_size} bytes")
+                os.rename(tmp_output, output_path)
+                return
+            else:
+                logger.warning(f"Fallback produced very small file: {file_size} bytes")
+        
+        logger.warning(f"Fallback failed (exit code: {result.returncode}): {result.stderr}")
+        
+    except subprocess.TimeoutExpired:
+        logger.error(f"Fallback conversion also timed out")
+        try:
+            subprocess.run(["pkill", "-f", "wkhtmltopdf"], capture_output=True)
+        except:
+            pass
+    
+    except Exception as e:
+        logger.warning(f"Fallback attempt failed: {e}")
+    
+    # Final cleanup and error handling
+    if os.path.exists(tmp_output):
+        file_size = os.path.getsize(tmp_output)
+        if file_size > 100:  # Very minimal threshold - at least some content
+            logger.warning(f"Using partial PDF file: {file_size} bytes")
+            os.rename(tmp_output, output_path)
+            return
+        else:
+            os.remove(tmp_output)
+    
+    # All attempts failed
+    error_msg = f"Failed to convert {url} to PDF after multiple attempts. "
+    error_msg += "The webpage may be too complex, slow to load, or blocked. "
+    error_msg += f"Tried with {timeout}s timeout and fallback settings."
+    
+    raise Exception(error_msg)
 
 def send_email_to_kindle(attachment_path: str) -> None:
     """Send an email with an attachment to the Kindle email address.

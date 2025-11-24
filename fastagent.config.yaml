@@ -1,8 +1,5 @@
 mcp:
   servers:
-    weather:
-      command: "uv"
-      args: ["run", "python", "-m", "mcp_weather_server"]
     time:
       command: "uv"
       args: ["run", "python", "-m", "mcp_server_time", "--local-timezone", "Asia/Tokyo"]
@@ -12,18 +9,15 @@ mcp:
     fetch:
       command: "uvx"
       args: ["mcp-server-fetch"]
-    context7:
-      command: "npx"
-      args: ["-y", "@upstash/context7-mcp"]
     filesystem:
       command: "npx"
       args: ["-y", "@modelcontextprotocol/server-filesystem", "/home/chase/Codes/chatbot/bbot/data", "/home/chase/Codes/chatbot/bbot/data/document", "/home/chase/Calibre Library"]
     utils:
       command: "uv"
       args: ["run", "python", "-m", "mcp_server_utils"]
-    vlc:
+    sms:
       command: "uv"
-      args: ["run", "python", "mcp_vlc_server.py"]
+      args: ["run", "python", "-m", "mcp_sms_server"]
     calibre:
       command: "uv"
       args: ["run", "python", "mcp_calibre_server.py"]

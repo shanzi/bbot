@@ -192,19 +192,20 @@ def trim_pdf_margins(file_path: str, uniform_order_stat: int = 1) -> str:
         return f"An unexpected error occurred: {e}"
 
 @fast_mcp.tool()
-def webpage_to_pdf(url: str, output_path: str) -> str:
-    """Convert a webpage to PDF using wkhtmltopdf.
+def webpage_to_pdf(url: str, output_path: str, timeout: int = 60) -> str:
+    """Convert a webpage to PDF using wkhtmltopdf with timeout handling.
     
     Args:
         url: The URL of the webpage to convert
         output_path: Path where the PDF should be saved
+        timeout: Maximum time in seconds to wait for conversion (default: 60)
         
     Returns:
         str: Success or error message
     """
     try:
-        utils.webpage_to_pdf(url, output_path)
-        return f"Successfully converted {url} to {output_path}"
+        utils.webpage_to_pdf(url, output_path, timeout)
+        return f"Successfully converted {url} to {output_path} (timeout: {timeout}s)"
     except Exception as e:
         return f"Failed to convert {url} to PDF: {e}"
 
