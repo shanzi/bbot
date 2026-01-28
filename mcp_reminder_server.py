@@ -60,15 +60,12 @@ async def list_tools() -> list[Tool]:
             name="add_reminder",
             description=(
                 "Add a new reminder or scheduled task. The reminder will be stored and "
-                "triggered at the specified time, causing the agent to proactively message the user."
+                "triggered at the specified time, causing the agent to proactively message the user. "
+                "Returns the reminder ID which the system uses to route the notification."
             ),
             inputSchema={
                 "type": "object",
                 "properties": {
-                    "chat_id": {
-                        "type": "integer",
-                        "description": "Telegram chat ID for this reminder"
-                    },
                     "message": {
                         "type": "string",
                         "description": "Reminder message or task description"
@@ -83,26 +80,21 @@ async def list_tools() -> list[Tool]:
                         "enum": ["none", "daily", "weekly", "monthly"]
                     }
                 },
-                "required": ["chat_id", "message", "trigger_time"]
+                "required": ["message", "trigger_time"]
             }
         ),
         Tool(
             name="list_reminders",
-            description="List all reminders for a specific chat, optionally filtered by status.",
+            description="List all reminders, optionally filtered by status.",
             inputSchema={
                 "type": "object",
                 "properties": {
-                    "chat_id": {
-                        "type": "integer",
-                        "description": "Telegram chat ID to list reminders for"
-                    },
                     "status": {
                         "type": "string",
                         "description": "Filter by status: 'pending', 'triggered', 'cancelled', or 'all'",
                         "enum": ["all", "pending", "triggered", "cancelled"]
                     }
-                },
-                "required": ["chat_id"]
+                }
             }
         ),
         Tool(
@@ -121,7 +113,7 @@ async def list_tools() -> list[Tool]:
         ),
         Tool(
             name="get_pending_reminders",
-            description="Get all pending reminders across all chats (used by bot for checking triggers).",
+            description="Get all pending reminders (used by bot for checking triggers).",
             inputSchema={
                 "type": "object",
                 "properties": {}
@@ -136,7 +128,6 @@ async def call_tool(name: str, arguments: Any) -> list[TextContent]:
 
     if name == "add_reminder":
         return await add_reminder(
-            arguments["chat_id"],
             arguments["message"],
             arguments["trigger_time"],
             arguments.get("recurrence", "none")
@@ -144,7 +135,6 @@ async def call_tool(name: str, arguments: Any) -> list[TextContent]:
 
     elif name == "list_reminders":
         return await list_reminders_tool(
-            arguments["chat_id"],
             arguments.get("status", "all")
         )
 
@@ -159,7 +149,6 @@ async def call_tool(name: str, arguments: Any) -> list[TextContent]:
 
 
 async def add_reminder(
-    chat_id: int,
     message: str,
     trigger_time: str,
     recurrence: str = "none"
@@ -213,7 +202,6 @@ async def add_reminder(
     # Create reminder
     reminder = {
         "id": get_next_id(reminders),
-        "chat_id": chat_id,
         "message": message,
         "trigger_time": trigger_time_iso,
         "created_at": datetime.now().isoformat(),
@@ -235,27 +223,23 @@ async def add_reminder(
     )]
 
 
-async def list_reminders_tool(chat_id: int, status: str = "all") -> list[TextContent]:
-    """List reminders for a chat."""
+async def list_reminders_tool(status: str = "all") -> list[TextContent]:
+    """List all reminders."""
     reminders = load_reminders()
 
-    # Filter by chat_id
-    chat_reminders = [r for r in reminders if r["chat_id"] == chat_id]
-
     # Filter by status if specified
-    if status != "all":
-        chat_reminders = [r for r in chat_reminders if r["status"] == status]
+    filtered_reminders = reminders if status == "all" else [r for r in reminders if r["status"] == status]
 
-    if not chat_reminders:
+    if not filtered_reminders:
         return [TextContent(
             type="text",
-            text=f"No reminders found for this chat (status: {status})"
+            text=f"No reminders found (status: {status})"
         )]
 
     # Format reminders
-    lines = [f"📋 Reminders for Chat {chat_id} (status: {status}):\n"]
+    lines = [f"📋 All Reminders (status: {status}):\n"]
 
-    for reminder in sorted(chat_reminders, key=lambda r: r["trigger_time"]):
+    for reminder in sorted(filtered_reminders, key=lambda r: r["trigger_time"]):
         trigger_dt = datetime.fromisoformat(reminder["trigger_time"])
         status_emoji = {
             "pending": "⏰",

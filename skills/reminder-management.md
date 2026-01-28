@@ -25,7 +25,6 @@ Create a new reminder or scheduled task.
 **Tool:** `add_reminder`
 
 **Parameters:**
-- `chat_id` - Telegram chat ID (use the current chat ID from context)
 - `message` - What to remind the user about
 - `trigger_time` - When to send the reminder
 
@@ -44,13 +43,13 @@ Create a new reminder or scheduled task.
 **Examples:**
 ```
 User: "Remind me in 30 minutes to check the oven"
-→ add_reminder(chat_id=123, message="Check the oven", trigger_time="+30m")
+→ add_reminder(message="Check the oven", trigger_time="+30m")
 
 User: "Set a reminder for tomorrow at 9am"
-→ add_reminder(chat_id=123, message="Daily standup meeting", trigger_time="2026-01-29T09:00:00")
+→ add_reminder(message="Daily standup meeting", trigger_time="2026-01-29T09:00:00")
 
 User: "Remind me in 2 hours to call mom"
-→ add_reminder(chat_id=123, message="Call mom", trigger_time="+2h")
+→ add_reminder(message="Call mom", trigger_time="+2h")
 ```
 
 ### 2. List Reminders
@@ -60,7 +59,6 @@ View all reminders for the current chat.
 **Tool:** `list_reminders`
 
 **Parameters:**
-- `chat_id` - Telegram chat ID
 - `status` - Optional filter: "pending", "triggered", "cancelled", or "all"
 
 **Status Types:**
@@ -71,13 +69,13 @@ View all reminders for the current chat.
 **Examples:**
 ```
 User: "Show my reminders"
-→ list_reminders(chat_id=123, status="all")
+→ list_reminders(status="all")
 
 User: "What reminders are coming up?"
-→ list_reminders(chat_id=123, status="pending")
+→ list_reminders(status="pending")
 
 User: "Show triggered reminders"
-→ list_reminders(chat_id=123, status="triggered")
+→ list_reminders(status="triggered")
 ```
 
 ### 3. Cancel Reminder
@@ -113,7 +111,6 @@ User: "Cancel that reminder"
 User: "Set a timer for 15 minutes"
 
 1. add_reminder(
-     chat_id=current_chat_id,
      message="Timer finished! 15 minutes are up.",
      trigger_time="+15m"
    )
@@ -126,7 +123,6 @@ User: "Remind me to submit the report by 5pm today"
 
 1. Calculate 5pm today in ISO format: "2026-01-28T17:00:00"
 2. add_reminder(
-     chat_id=current_chat_id,
      message="Time to submit the report!",
      trigger_time="2026-01-28T17:00:00"
    )
@@ -139,7 +135,6 @@ User: "Remind me about the meeting next Monday at 10am"
 
 1. Calculate next Monday 10am: "2026-02-03T10:00:00"
 2. add_reminder(
-     chat_id=current_chat_id,
      message="Meeting reminder: Time for your scheduled meeting",
      trigger_time="2026-02-03T10:00:00"
    )
@@ -150,7 +145,7 @@ User: "Remind me about the meeting next Monday at 10am"
 ```
 User: "What reminders do I have?"
 
-1. list_reminders(chat_id=current_chat_id, status="pending")
+1. list_reminders(status="pending")
 2. Display reminders with IDs and times
 3. User: "Cancel the one about the dentist"
 4. Identify reminder ID (e.g., 8)
@@ -369,7 +364,9 @@ Agent:
 
 ## Security & Privacy
 
-- Reminders are stored per chat_id
-- Users can only see/cancel their own reminders
+- Reminders are stored globally and shared across all users
+- The bot maintains a mapping to route notifications to the correct chat
+- All users can see all reminders when listing (consider limiting this in production)
 - Reminder messages stored in plain text in data/reminders/reminders.json
 - Consider privacy when storing sensitive reminder content
+- For multi-user deployments, consider filtering list_reminders by chat context
