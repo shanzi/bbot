@@ -27,7 +27,8 @@ def get_fast_agent_app(model_name: str):
     @fast.agent(
         instruction=_get_agent_instruction(),
         model=model_name,
-        servers=["utils", "time", "calculator", "fetch", "filesystem", "calibre", "sms"],
+        servers=["utils", "time", "calculator", "fetch", "filesystem", "calibre", "sms",
+                 "transmission", "search"],
     )
     async def main_agent():
         """Main agent function - controlled externally."""
@@ -97,6 +98,20 @@ def _get_agent_instruction() -> str:
         "The Calibre library is also accessible via the filesystem server for direct file operations. "
         "When users upload ebooks or ask for format conversions, use these tools to manage their digital library efficiently. "
         "For Kindle delivery, the `send_book_to_kindle` tool exports the book and emails it automatically. "
+        "\n\n**TORRENT MANAGEMENT:** You have access to Transmission BitTorrent client through the `transmission` server. "
+        "When a .torrent file is downloaded or uploaded: "
+        "1. Move the .torrent file to 'data/torrents' folder using the `filesystem` tool "
+        "2. Analyze the torrent filename to determine the content type (movie, TV show, etc.) "
+        "3. Use `add_torrent` with the file path and appropriate download_dir parameter: "
+        "   - For movies: download_dir='/media/chase/Secondary/Movies' "
+        "   - For other content: download_dir='/media/chase/Secondary/' or leave as default "
+        "4. The torrent will start downloading to the specified location automatically "
+        "5. Use `show_active_downloads` to display detailed status of currently downloading torrents with progress percentage, download speed, ETA, and remaining size "
+        "6. Use `list_torrents` to see all torrents (active and completed) "
+        "7. Use `manage_torrent` with actions: 'start', 'pause', 'remove', or 'remove_with_data' to control torrents "
+        "When users ask about downloads, torrents, or upload .torrent files, use these tools to manage their downloads efficiently. "
+        "When users ask about download status or progress, use `show_active_downloads` to provide detailed real-time information. "
+        "Always inform users where the content will be downloaded based on your analysis. "
         "\n\n"
         "However, your core purpose is to be a document management assistant with intelligent content-based file organization. "
         "When a user asks to delete a file, first move it to the 'data/trash' directory using the `filesystem` tool. "

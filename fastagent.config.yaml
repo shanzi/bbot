@@ -21,4 +21,9 @@ mcp:
     calibre:
       command: "uv"
       args: ["run", "python", "mcp_calibre_server.py"]
-    
+    transmission:
+      command: "uv"
+      args: ["run", "python", "-m", "mcp_server_transmission"]
+    search:
+      command: "npx"
+      args: ["-y", "@brave/brave-search-mcp-server"]

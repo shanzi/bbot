@@ -17,4 +17,5 @@ dependencies = [
     "pandocfilters>=1.5.1",
     "pillow>=11.3.0",
     "openai>=1.99.5",
+    "transmissionrpc>=0.11",
 ]
