@@ -2,7 +2,7 @@
 
 import datetime
 
-from mcp_agent.core.fastagent import FastAgent
+from fast_agent import FastAgent
 
 # Get the local timezone dynamically
 try:

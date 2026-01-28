@@ -14,7 +14,7 @@ import zoneinfo
 
 from dotenv import load_dotenv
 from mcp.types import ImageContent, TextContent, Role
-from mcp_agent.mcp.prompt_message_multipart import PromptMessageMultipart
+from fast_agent.mcp.prompt_message_extended import PromptMessageExtended
 from PIL import Image
 from telegram import (
     BotCommand,
@@ -571,8 +571,8 @@ async def _process_agent_response(agent_to_use, message_contents, context, chat_
     for i, content in enumerate(message_contents):
         logger.info(f"Content {i}: {type(content).__name__} - {content.type}")
 
-    # Create PromptMessageMultipart directly
-    multipart_message = PromptMessageMultipart(
+    # Create PromptMessageExtended directly
+    multipart_message = PromptMessageExtended(
         role="user",
         content=message_contents
     )
