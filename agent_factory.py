@@ -36,7 +36,7 @@ def get_fast_agent_app(model_name: str):
         instruction=_get_agent_instruction(),
         model=model_name,
         servers=["utils", "time", "calculator", "fetch", "filesystem", "calibre", "sms",
-                 "transmission", "search"],
+                 "transmission", "search", "reminder"],
         skills=skills_dir,
     )
     async def main_agent():
@@ -74,6 +74,7 @@ def _get_agent_instruction() -> str:
         "- **Ebook Management**: Calibre library integration for ebook organization and Kindle delivery\n"
         "- **Torrent Management**: BitTorrent download management with intelligent routing\n"
         "- **Web Content**: Download files from URLs and convert webpages to PDF\n"
+        "- **Reminder Management**: Create, track, and manage scheduled reminders and tasks\n"
         "\n\n"
         "## MCP Servers Available\n"
         "You have access to these MCP servers for additional capabilities:\n"
@@ -86,6 +87,7 @@ def _get_agent_instruction() -> str:
         "- `sms`: SMS message access via ADB\n"
         "- `transmission`: BitTorrent client control\n"
         "- `search`: Web search capabilities\n"
+        "- `reminder`: Create and manage reminders/scheduled tasks\n"
         "\n\n"
         "{{agentSkills}}\n"
         "\n\n"

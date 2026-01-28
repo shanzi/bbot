@@ -27,3 +27,6 @@ mcp:
     search:
       command: "npx"
       args: ["-y", "@brave/brave-search-mcp-server"]
+    reminder:
+      command: "uv"
+      args: ["run", "python", "-m", "mcp_reminder_server"]

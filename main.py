@@ -4,6 +4,7 @@ import asyncio
 import base64
 import datetime
 import io
+import json
 import logging
 import os
 import re
@@ -11,6 +12,7 @@ import time
 import unicodedata
 import urllib.parse
 import zoneinfo
+from pathlib import Path
 
 from dotenv import load_dotenv
 from mcp.types import ImageContent, TextContent, Role
@@ -830,13 +832,97 @@ async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> N
                 "An error occurred and my session has been reset. Please try again."
             )
 
+async def check_and_trigger_reminders(app):
+    """Background task to check for reminders and trigger them."""
+    logger.info("Starting reminder checker background task...")
+
+    reminders_file = Path(__file__).parent / "data" / "reminders" / "reminders.json"
+
+    while True:
+        try:
+            # Check every 30 seconds
+            await asyncio.sleep(30)
+
+            # Skip if file doesn't exist
+            if not reminders_file.exists():
+                continue
+
+            # Load reminders
+            try:
+                with open(reminders_file, 'r') as f:
+                    reminders = json.load(f)
+            except (json.JSONDecodeError, IOError) as e:
+                logger.error(f"Error loading reminders: {e}")
+                continue
+
+            # Check for due reminders
+            now = datetime.datetime.now()
+            triggered_any = False
+
+            for reminder in reminders:
+                # Skip if not pending
+                if reminder.get('status') != 'pending':
+                    continue
+
+                # Check if due
+                try:
+                    trigger_time = datetime.datetime.fromisoformat(reminder['trigger_time'])
+                    if trigger_time <= now:
+                        # Trigger this reminder
+                        chat_id = reminder['chat_id']
+                        message = reminder['message']
+                        reminder_id = reminder['id']
+
+                        logger.info(f"Triggering reminder {reminder_id} for chat {chat_id}: {message}")
+
+                        # Send reminder to user
+                        try:
+                            await app.bot.send_message(
+                                chat_id=chat_id,
+                                text=f"⏰ **Reminder**\n\n{message}",
+                                parse_mode=ParseMode.MARKDOWN
+                            )
+
+                            # Mark as triggered
+                            reminder['status'] = 'triggered'
+                            reminder['triggered_at'] = now.isoformat()
+                            triggered_any = True
+
+                            logger.info(f"Successfully triggered reminder {reminder_id}")
+
+                        except Exception as e:
+                            logger.error(f"Error sending reminder {reminder_id}: {e}")
+                            # Don't mark as triggered if send failed
+
+                except ValueError as e:
+                    logger.error(f"Invalid trigger_time for reminder {reminder.get('id')}: {e}")
+                    continue
+
+            # Save updated reminders if any were triggered
+            if triggered_any:
+                try:
+                    with open(reminders_file, 'w') as f:
+                        json.dump(reminders, f, indent=2)
+                    logger.info("Updated reminders file after triggering")
+                except IOError as e:
+                    logger.error(f"Error saving reminders: {e}")
+
+        except Exception as e:
+            logger.error(f"Error in reminder checker: {e}")
+            # Continue running even if there's an error
+            await asyncio.sleep(30)
+
+
 async def post_init(app):
-    """Initialize bot commands after startup."""
+    """Initialize bot commands and background tasks after startup."""
     await app.bot.set_my_commands([
         BotCommand("start", "Start a new conversation or reset the bot."),
         BotCommand("status", "Show current bot's status."),
         BotCommand("help", "Show this help message."),
     ])
+
+    # Start reminder checker in background
+    asyncio.create_task(check_and_trigger_reminders(app))
 
 
 def main() -> None:
