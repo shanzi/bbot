@@ -59,7 +59,6 @@ SUPPORTED_MODELS = {
     # OpenAI GPT-5.2 models
     "gpt-5.2": "openai.gpt-5.2",
     "gpt-5.2-codex": "openai.gpt-5.2-codex",
-    "gpt-5.2-pro": "openai.gpt-5.2-pro",
     # Anthropic Claude 4.5 models
     "claude-sonnet-4.5": "anthropic.claude-sonnet-4-5",
     "claude-opus-4.5": "anthropic.claude-opus-4-5",
