@@ -16,3 +16,10 @@ fastagent.jsonl
 
 # Data folder
 data/
+
+# Fast-agent generated files
+.fast-agent/
+
+# Test files
+test_*.py
+test_*.sh
