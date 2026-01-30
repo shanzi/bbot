@@ -74,13 +74,17 @@ async def list_tools() -> list[Tool]:
                         "type": "string",
                         "description": "When to trigger (ISO format: 2026-01-28T15:30:00 or relative like '+30m', '+2h', '+1d')"
                     },
+                    "chat_id": {
+                        "type": "integer",
+                        "description": "Telegram chat ID where the reminder should be sent"
+                    },
                     "recurrence": {
                         "type": "string",
                         "description": "Optional recurrence pattern: 'daily', 'weekly', 'monthly' (not implemented yet)",
                         "enum": ["none", "daily", "weekly", "monthly"]
                     }
                 },
-                "required": ["message", "trigger_time"]
+                "required": ["message", "trigger_time", "chat_id"]
             }
         ),
         Tool(
@@ -130,6 +134,7 @@ async def call_tool(name: str, arguments: Any) -> list[TextContent]:
         return await add_reminder(
             arguments["message"],
             arguments["trigger_time"],
+            arguments["chat_id"],
             arguments.get("recurrence", "none")
         )
 
@@ -151,6 +156,7 @@ async def call_tool(name: str, arguments: Any) -> list[TextContent]:
 async def add_reminder(
     message: str,
     trigger_time: str,
+    chat_id: int,
     recurrence: str = "none"
 ) -> list[TextContent]:
     """Add a new reminder."""
@@ -204,6 +210,7 @@ async def add_reminder(
         "id": get_next_id(reminders),
         "message": message,
         "trigger_time": trigger_time_iso,
+        "chat_id": chat_id,
         "created_at": datetime.now().isoformat(),
         "status": "pending",
         "recurrence": recurrence
@@ -218,6 +225,7 @@ async def add_reminder(
             f"✅ Reminder created (ID: {reminder['id']})\n"
             f"Message: {message}\n"
             f"Trigger: {trigger_dt.strftime('%Y-%m-%d %H:%M:%S')}\n"
+            f"Chat ID: {chat_id}\n"
             f"Status: pending"
         )
     )]

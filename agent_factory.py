@@ -12,11 +12,12 @@ except Exception:
     LOCAL_TIMEZONE = "UTC"  # Fallback if timezone detection fails
 
 
-def get_fast_agent_app(model_name: str):
+def get_fast_agent_app(model_name: str, chat_id: int = None):
     """Create a FastAgent application with document management capabilities.
 
     Args:
         model_name: The name of the model to use for the agent
+        chat_id: The Telegram chat ID for this agent session (used for reminders)
 
     Returns:
         FastAgent: Configured agent application
@@ -33,7 +34,7 @@ def get_fast_agent_app(model_name: str):
 
     # Define the agent with MCP servers and skills
     @fast.agent(
-        instruction=_get_agent_instruction(),
+        instruction=_get_agent_instruction(chat_id),
         model=model_name,
         servers=["utils", "time", "calculator", "fetch", "filesystem", "calibre", "sms",
                  "transmission", "search", "reminder"],
@@ -46,12 +47,19 @@ def get_fast_agent_app(model_name: str):
     return fast
 
 
-def _get_agent_instruction() -> str:
+def _get_agent_instruction(chat_id: int = None) -> str:
     """Get the core instruction set for the agent.
+
+    Args:
+        chat_id: The Telegram chat ID for this agent session
 
     Returns:
         str: Base instruction text for the agent
     """
+    chat_id_info = f"\n\n**IMPORTANT: Your Telegram Chat ID is {chat_id}**\n" \
+                   f"When creating reminders using the `add_reminder` tool, you MUST include this chat_id as a parameter.\n" \
+                   f"This ensures reminders are sent to the correct Telegram chat.\n" if chat_id else ""
+
     return (
         "You are a helpful AI assistant with specialized skills in document management, "
         "ebook organization, SMS handling, torrent management, and web content processing. "
@@ -88,6 +96,7 @@ def _get_agent_instruction() -> str:
         "- `transmission`: BitTorrent client control\n"
         "- `search`: Web search capabilities\n"
         "- `reminder`: Create and manage reminders/scheduled tasks\n"
+        f"{chat_id_info}"
         "\n\n"
         "{{agentSkills}}\n"
         "\n\n"

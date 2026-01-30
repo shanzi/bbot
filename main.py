@@ -73,7 +73,6 @@ SUPPORTED_MODELS = {
 # Global state dictionaries
 current_agents = {}  # Dictionary to store the current agent for each chat
 agent_instances = {}  # Dictionary to store initialized agent instances
-reminder_chat_mapping = {}  # Map reminder_id -> chat_id for routing notifications
 
 # Get the local timezone dynamically
 try:
@@ -537,7 +536,7 @@ async def _get_or_create_agent(chat_id, context, message_id):
                 message_id=message_id,
                 text=f"Loading {agent_alias.capitalize()} agent..."
             )
-            fast_app = get_fast_agent_app(model_name)
+            fast_app = get_fast_agent_app(model_name, chat_id=chat_id)
             # IMPORTANT: Use 'async with' to ensure proper FastAgent lifecycle management.
             # Do not revert to 'await fast_app.run()' as it can lead to resource leaks.
             async with fast_app.run() as agent:
@@ -585,16 +584,6 @@ async def _process_agent_response(agent_to_use, message_contents, context, chat_
 
     # Get only the last text content (final assistant response)
     response_text = response_multipart.last_text()
-
-    # Check if a reminder was created and save chat mapping
-    reminder_pattern = r'Reminder created \(ID: (\d+)\)'
-    reminder_match = re.search(reminder_pattern, response_text)
-    if reminder_match:
-        reminder_id = int(reminder_match.group(1))
-        global reminder_chat_mapping
-        reminder_chat_mapping[reminder_id] = chat_id
-        save_reminder_mapping(reminder_chat_mapping)
-        logger.info(f"Mapped reminder {reminder_id} to chat {chat_id}")
 
     # Find all image tags in the response with robust parsing that handles parentheses in paths
     image_tags = []
@@ -843,41 +832,11 @@ async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> N
                 "An error occurred and my session has been reset. Please try again."
             )
 
-def load_reminder_mapping():
-    """Load reminder_id -> chat_id mapping."""
-    mapping_file = Path(__file__).parent / "data" / "reminders" / "chat_mapping.json"
-    if not mapping_file.exists():
-        return {}
-
-    try:
-        with open(mapping_file, 'r') as f:
-            # Load and convert string keys to integers
-            return {int(k): v for k, v in json.load(f).items()}
-    except (json.JSONDecodeError, IOError):
-        return {}
-
-
-def save_reminder_mapping(mapping):
-    """Save reminder_id -> chat_id mapping."""
-    mapping_file = Path(__file__).parent / "data" / "reminders" / "chat_mapping.json"
-    mapping_file.parent.mkdir(parents=True, exist_ok=True)
-
-    try:
-        with open(mapping_file, 'w') as f:
-            json.dump(mapping, f, indent=2)
-    except IOError as e:
-        logger.error(f"Error saving reminder mapping: {e}")
-
-
 async def check_and_trigger_reminders(app):
     """Background task to check for reminders and trigger them."""
     logger.info("Starting reminder checker background task...")
 
     reminders_file = Path(__file__).parent / "data" / "reminders" / "reminders.json"
-
-    # Load initial mapping
-    global reminder_chat_mapping
-    reminder_chat_mapping = load_reminder_mapping()
 
     while True:
         try:
@@ -887,9 +846,6 @@ async def check_and_trigger_reminders(app):
             # Skip if file doesn't exist
             if not reminders_file.exists():
                 continue
-
-            # Reload mapping in case it changed
-            reminder_chat_mapping = load_reminder_mapping()
 
             # Load reminders
             try:
@@ -914,12 +870,10 @@ async def check_and_trigger_reminders(app):
                     if trigger_time <= now:
                         reminder_id = reminder['id']
                         message = reminder['message']
-
-                        # Look up chat_id from mapping
-                        chat_id = reminder_chat_mapping.get(reminder_id)
+                        chat_id = reminder.get('chat_id')
 
                         if chat_id is None:
-                            logger.warning(f"No chat mapping found for reminder {reminder_id}, skipping")
+                            logger.warning(f"No chat_id found in reminder {reminder_id}, skipping")
                             continue
 
                         logger.info(f"Triggering reminder {reminder_id} for chat {chat_id}: {message}")
